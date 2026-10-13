@@ -3,9 +3,10 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { Pressable, StyleSheet } from 'react-native';
 
 import { openDatabase } from './database';
-import { initStorage, type InitResult } from './init';
+import type { InitResult } from './init';
 import { requestPersistentStorage, type PersistenceStatus } from './persistence';
-import { toError, type Database } from './types';
+import { startStorageSession, type StorageSession } from './session';
+import type { Database } from './types';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -40,39 +41,25 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    let opened: Database | null = null;
-    let closed = false;
-    const closeOpened = () => {
-      if (opened && !closed) {
-        closed = true;
-        opened.close().catch(() => {});
-      }
-    };
+    let session: StorageSession | null = null;
 
-    (async () => {
-      let r: InitResult;
-      try {
-        opened = await openDatabase();
-        r = await initStorage(opened);
-      } catch (e) {
-        r = { status: 'error', error: toError(e) };
-      }
+    startStorageSession(openDatabase).then((started) => {
+      session = started;
       if (cancelled) {
-        closeOpened();
+        started.close();
         return;
       }
-      if (r.status !== 'ready') closeOpened();
-      setDatabase(r.status === 'ready' ? opened : null);
-      setResult(r);
-      if (r.status === 'ready') {
+      setDatabase(started.database);
+      setResult(started.result);
+      if (started.result.status === 'ready') {
         requestPersistentStorage().then((p) => !cancelled && setPersistence(p));
       }
       SplashScreen.hideAsync();
-    })();
+    });
 
     return () => {
       cancelled = true;
-      closeOpened();
+      session?.close();
     };
   }, [attempt]);
 
