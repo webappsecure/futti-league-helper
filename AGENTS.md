@@ -45,11 +45,13 @@ npm run android             # dev server, open Android emulator
 npm run web                 # dev server, web
 npm run lint                # lint (expo lint)
 npx tsc --noEmit            # typecheck
+npm test                    # unit tests (jest-expo)
 npx expo-doctor             # diagnose dependency and config issues
 npx expo install --fix      # fix incompatible package versions
 ```
 
-- No `test` command exists yet, so tests are not a gate. Run `/tests` to add a runner.
+- Tests are a gate for logic-bearing work: `npm test` must pass. Rule and storage logic stays in pure functions so it can be tested.
+- `expo-env.d.ts` is generated (gitignored); if typecheck reports missing CSS module types on a fresh clone, run `npx expo start` once to create it.
 - No combined `Verify` command or GitHub workflow exists. Run `/ci` if you want one.
 - Run lint and typecheck before declaring any task done.
 
