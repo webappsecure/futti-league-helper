@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, TopTabInset, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { usePersistenceStatus, useSchemaVersion } from '@/storage/storage-provider';
 
 const PERSISTENCE_LABEL = {
@@ -44,7 +44,6 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     padding: Spacing.four,
     gap: Spacing.three,
-    paddingTop: TopTabInset,
     paddingBottom: BottomTabInset + Spacing.three,
   },
   card: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.two },

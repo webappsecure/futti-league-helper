@@ -9,6 +9,7 @@ export interface Database {
   list<T>(collection: string): Promise<Result<{ id: string; value: T }[]>>;
   /** Applies every op or none of them. */
   batch(ops: Op[]): Promise<Result<void>>;
+  close(): Promise<void>;
 }
 
 export function toError(e: unknown): Error {

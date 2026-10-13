@@ -1,6 +1,7 @@
 import { toError, type Database, type Op } from './types';
 
-export type Migration = (db: Database) => Promise<void>;
+/** Returns the writes to apply; they commit together with the new schema version. */
+export type Migration = (db: Database) => Promise<Op[]>;
 
 export const migrations: Migration[] = [];
 
@@ -15,9 +16,8 @@ export type InitResult =
   | { status: 'newer-version'; storedVersion: number }
   | { status: 'error'; error: Error };
 
-function writeVersion(db: Database, schemaVersion: number) {
-  const op: Op = { type: 'put', ...META, value: { schemaVersion } satisfies Meta };
-  return db.batch([op]);
+function versionOp(schemaVersion: number): Op {
+  return { type: 'put', ...META, value: { schemaVersion } satisfies Meta };
 }
 
 export async function initStorage(
@@ -29,7 +29,7 @@ export async function initStorage(
   if (!meta.ok) return { status: 'error', error: meta.error };
 
   if (meta.value === null) {
-    const written = await writeVersion(db, target);
+    const written = await db.batch([versionOp(target)]);
     if (!written.ok) return { status: 'error', error: written.error };
     return { status: 'ready', schemaVersion: target };
   }
@@ -41,14 +41,15 @@ export async function initStorage(
   if (version > target) return { status: 'newer-version', storedVersion: version };
 
   while (version < target) {
+    let ops: Op[];
     try {
-      await steps[version - 1](db);
+      ops = await steps[version - 1](db);
     } catch (e) {
       return { status: 'error', error: toError(e) };
     }
-    version += 1;
-    const written = await writeVersion(db, version);
+    const written = await db.batch([...ops, versionOp(version + 1)]);
     if (!written.ok) return { status: 'error', error: written.error };
+    version += 1;
   }
   return { status: 'ready', schemaVersion: version };
 }

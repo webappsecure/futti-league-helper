@@ -4,7 +4,7 @@ import { StyleSheet } from 'react-native';
 import { MasterDetail } from '@/components/master-detail';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, TopTabInset, Spacing } from '@/constants/theme';
+import { BottomTabInset, Spacing } from '@/constants/theme';
 
 export default function LeaguesScreen() {
   return (
@@ -30,6 +30,5 @@ export default function LeaguesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  safeArea: { flex: 1, paddingTop: TopTabInset,
-    paddingBottom: BottomTabInset + Spacing.three },
+  safeArea: { flex: 1, paddingBottom: BottomTabInset + Spacing.three },
 });

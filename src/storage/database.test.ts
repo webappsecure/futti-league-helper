@@ -62,6 +62,19 @@ describe.each(backends)('%s database', (_name, make) => {
     expect(await db.get('c2', 'a')).toEqual({ ok: true, value: 2 });
   });
 
+  it('keeps neighbouring collection names apart', async () => {
+    await db.batch([
+      { type: 'put', collection: 'c', id: 'a', value: 'c' },
+      { type: 'put', collection: 'cc', id: 'a', value: 'cc' },
+      { type: 'put', collection: 'c2', id: 'a', value: 'c2' },
+    ]);
+    expect(await db.list('c')).toEqual({ ok: true, value: [{ id: 'a', value: 'c' }] });
+  });
+
+  it('closes without error', async () => {
+    await expect(db.close()).resolves.toBeUndefined();
+  });
+
   it('applies none of a batch when one value cannot be stored', async () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;

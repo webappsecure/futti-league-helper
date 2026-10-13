@@ -76,5 +76,9 @@ export function createIndexedDbDatabase(db: IDBDatabase): Database {
         return fail(e);
       }
     },
+
+    async close() {
+      db.close();
+    },
   };
 }

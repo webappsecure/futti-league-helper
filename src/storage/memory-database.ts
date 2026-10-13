@@ -37,5 +37,7 @@ export function createMemoryDatabase(): Database {
         return fail(e);
       }
     },
+
+    async close() {},
   };
 }

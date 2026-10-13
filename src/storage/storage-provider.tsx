@@ -40,20 +40,39 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    openDatabase()
-      .then(async (db) => ({ db, r: await initStorage(db) }))
-      .catch((e: unknown) => ({ db: null, r: { status: 'error', error: toError(e) } as InitResult }))
-      .then(({ db, r }) => {
-        if (cancelled) return;
-        setDatabase(db);
-        setResult(r);
-        if (r.status === 'ready') {
-          requestPersistentStorage().then((p) => !cancelled && setPersistence(p));
-        }
-        SplashScreen.hideAsync();
-      });
+    let opened: Database | null = null;
+    let closed = false;
+    const closeOpened = () => {
+      if (opened && !closed) {
+        closed = true;
+        opened.close().catch(() => {});
+      }
+    };
+
+    (async () => {
+      let r: InitResult;
+      try {
+        opened = await openDatabase();
+        r = await initStorage(opened);
+      } catch (e) {
+        r = { status: 'error', error: toError(e) };
+      }
+      if (cancelled) {
+        closeOpened();
+        return;
+      }
+      if (r.status !== 'ready') closeOpened();
+      setDatabase(r.status === 'ready' ? opened : null);
+      setResult(r);
+      if (r.status === 'ready') {
+        requestPersistentStorage().then((p) => !cancelled && setPersistence(p));
+      }
+      SplashScreen.hideAsync();
+    })();
+
     return () => {
       cancelled = true;
+      closeOpened();
     };
   }, [attempt]);
 
