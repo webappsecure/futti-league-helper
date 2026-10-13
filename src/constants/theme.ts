@@ -24,6 +24,11 @@ export const Colors = {
   },
 } as const;
 
+export const Accent = {
+  primary: '#3c87f7',
+  danger: '#d92d20',
+} as const;
+
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
 export const Fonts = Platform.select({
