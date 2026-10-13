@@ -1,6 +1,7 @@
 import { createId } from '@/leagues/ids';
 import { LEAGUE_COLLECTION, isLeague, type League } from '@/leagues/league';
 import { chainLeagueIds } from '@/leagues/league-links';
+import { ROSTER_COLLECTION } from '@/rosters/roster';
 import type { Database } from '@/storage/types';
 import {
   displayName,
@@ -133,6 +134,9 @@ export async function updateFranchise(
 }
 
 export async function deleteFranchise(db: Database, id: string): Promise<FranchiseResult<void>> {
-  const removed = await db.batch([{ type: 'delete', collection: FRANCHISE_COLLECTION, id }]);
+  const removed = await db.batch([
+    { type: 'delete', collection: ROSTER_COLLECTION, id },
+    { type: 'delete', collection: FRANCHISE_COLLECTION, id },
+  ]);
   return removed.ok ? done(undefined) : storage(removed.error);
 }

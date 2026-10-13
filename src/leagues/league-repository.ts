@@ -1,6 +1,7 @@
 import { LEAGUE_COLLECTION, createLeagueId, isLeague, validateLeagueInput, type FieldErrors, type League, type LeagueInput } from './league';
 import { leagueAbove, leagueBelow, linkedEditProblems } from './league-links';
 import type { Database, Op } from '@/storage/types';
+import { ROSTER_COLLECTION } from '@/rosters/roster';
 import { FRANCHISE_COLLECTION } from '@/teams/franchise-repository';
 
 const COLLECTION = LEAGUE_COLLECTION;
@@ -100,9 +101,11 @@ export async function updateLeague(
 export async function deleteLeague(db: Database, id: string): Promise<LeagueResult<void>> {
   const stored = await db.list<{ leagueId?: unknown }>(FRANCHISE_COLLECTION);
   if (!stored.ok) return storage(stored.error);
-  const teamOps = stored.value
-    .filter((doc) => doc.value?.leagueId === id)
-    .map((doc): Op => ({ type: 'delete', collection: FRANCHISE_COLLECTION, id: doc.id }));
+  const teamDocs = stored.value.filter((doc) => doc.value?.leagueId === id);
+  const teamOps = teamDocs.flatMap((doc): Op[] => [
+    { type: 'delete', collection: ROSTER_COLLECTION, id: doc.id },
+    { type: 'delete', collection: FRANCHISE_COLLECTION, id: doc.id },
+  ]);
   const all = await listLeagues(db);
   if (!all.ok) return all;
   const unlinkOps = all.value.leagues
