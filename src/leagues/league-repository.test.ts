@@ -6,6 +6,7 @@ import {
   listLeagues,
   updateLeague,
 } from './league-repository';
+import { listFranchises, createFranchise } from '@/teams/franchise-repository';
 import { createMemoryDatabase } from '@/storage/memory-database';
 
 const input = (overrides: Partial<LeagueInput> = {}): LeagueInput => ({
@@ -122,5 +123,42 @@ describe('league repository', () => {
     const failing = { ...real, batch: async () => ({ ok: false as const, error: new Error('disk full') }) };
     const result = await createLeague(failing, input(), ids());
     expect(result).toEqual({ ok: false, error: { kind: 'storage', error: new Error('disk full') } });
+  });
+});
+
+describe('league repository with teams', () => {
+  const team = { city: 'Richmond', name: 'Greyhounds', primaryColor: '#000000', secondaryColor: '#ffffff', initialGrade: 'A' };
+
+  async function withTeams(count: number, otherLeagueTeams = 0) {
+    const db = createMemoryDatabase();
+    const newId = ids();
+    const league = await created(db, { size: 10 }, newId);
+    const other = await created(db, { name: 'Other' }, newId);
+    for (let i = 0; i < count; i += 1) await createFranchise(db, league, { ...team, name: `T${i}` });
+    for (let i = 0; i < otherLeagueTeams; i += 1) await createFranchise(db, other, { ...team, name: `O${i}` });
+    return { db, league, other };
+  }
+
+  it('deletes only its own franchises with the league', async () => {
+    const { db, league, other } = await withTeams(3, 2);
+    expect((await deleteLeague(db, league.id)).ok).toBe(true);
+    expect(await listFranchises(db, league)).toEqual({ ok: true, value: { teams: [], unreadable: 0 } });
+    const rest = await listFranchises(db, other);
+    expect(rest.ok && rest.value.teams).toHaveLength(2);
+    expect(await getLeague(db, league.id)).toEqual({ ok: true, value: null });
+  });
+
+  it('refuses a size below the team count and writes nothing', async () => {
+    const { db, league } = await withTeams(10);
+    const result = await updateLeague(db, league.id, input({ name: 'Renamed', size: 8 }));
+    expect(result).toEqual({ ok: false, error: { kind: 'validation', fields: { size: expect.any(String) } } });
+    const stored = await getLeague(db, league.id);
+    expect(stored.ok && stored.value?.name).toBe('Premier');
+  });
+
+  it('allows a size at or above the team count', async () => {
+    const { db, league } = await withTeams(10);
+    expect((await updateLeague(db, league.id, input({ size: 10 }))).ok).toBe(true);
+    expect((await updateLeague(db, league.id, input({ size: 12 }))).ok).toBe(true);
   });
 });

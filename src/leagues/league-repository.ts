@@ -1,5 +1,6 @@
 import { createLeagueId, isLeague, validateLeagueInput, type FieldErrors, type League, type LeagueInput } from './league';
-import type { Database } from '@/storage/types';
+import type { Database, Op } from '@/storage/types';
+import { FRANCHISE_COLLECTION } from '@/teams/franchise-repository';
 
 const COLLECTION = 'leagues';
 
@@ -66,12 +67,27 @@ export async function updateLeague(
   const existing = await getLeague(db, id);
   if (!existing.ok) return existing;
   if (existing.value === null) return { ok: false, error: { kind: 'not-found' } };
+  const stored = await db.list<{ leagueId?: unknown }>(FRANCHISE_COLLECTION);
+  if (!stored.ok) return storage(stored.error);
+  const teamCount = stored.value.filter((doc) => doc.value?.leagueId === id).length;
+  if (checked.value.size < teamCount) {
+    const noun = teamCount === 1 ? 'team' : 'teams';
+    return {
+      ok: false,
+      error: { kind: 'validation', fields: { size: `This league has ${teamCount} ${noun}. Remove teams first or choose ${teamCount} or more.` } },
+    };
+  }
   const league: League = { id, ...checked.value };
   const written = await db.batch([{ type: 'put', collection: COLLECTION, id, value: league }]);
   return written.ok ? done(league) : storage(written.error);
 }
 
 export async function deleteLeague(db: Database, id: string): Promise<LeagueResult<void>> {
-  const removed = await db.batch([{ type: 'delete', collection: COLLECTION, id }]);
+  const stored = await db.list<{ leagueId?: unknown }>(FRANCHISE_COLLECTION);
+  if (!stored.ok) return storage(stored.error);
+  const teamOps = stored.value
+    .filter((doc) => doc.value?.leagueId === id)
+    .map((doc): Op => ({ type: 'delete', collection: FRANCHISE_COLLECTION, id: doc.id }));
+  const removed = await db.batch([...teamOps, { type: 'delete', collection: COLLECTION, id }]);
   return removed.ok ? done(undefined) : storage(removed.error);
 }

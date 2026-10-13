@@ -77,6 +77,7 @@ export default function LeaguesScreen() {
   } else if (selected) {
     detail = (
       <LeagueDetail
+        key={selected.id}
         league={selected}
         confirmingDelete={mode === 'confirm-delete'}
         deleting={deleting}

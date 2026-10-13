@@ -5,6 +5,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Accent, Spacing } from '@/constants/theme';
 import type { League } from '@/leagues/league';
+import { TeamsSection } from '@/components/teams/team-list';
+import { useFranchises } from '@/teams/use-franchises';
 
 interface LeagueDetailProps {
   league: League;
@@ -32,6 +34,9 @@ export function LeagueDetail({
   onCancelDelete,
   onConfirmDelete,
 }: LeagueDetailProps) {
+  const { state, refresh, retry } = useFranchises(league);
+  const hasTeams = state.status === 'ready' && state.teams.length > 0;
+
   return (
     <ThemedView style={styles.container}>
       <ThemedText type="subtitle">{league.name}</ThemedText>
@@ -50,10 +55,12 @@ export function LeagueDetail({
         )}
       </ThemedView>
 
+      <TeamsSection league={league} state={state} refresh={refresh} onRetry={retry} />
+
       {confirmingDelete ? (
         <ThemedView type="backgroundElement" style={styles.card}>
           <ThemedText accessibilityRole="alert">
-            Delete {league.name}? This cannot be undone.
+            Delete {league.name}?{hasTeams ? ' Its teams are deleted too.' : ''} This cannot be undone.
           </ThemedText>
           {deleteError !== null && (
             <ThemedText accessibilityRole="alert" style={styles.error}>

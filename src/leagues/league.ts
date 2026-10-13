@@ -1,3 +1,5 @@
+import { createId } from './ids';
+
 export const LEAGUE_SIZES = [6, 8, 10, 12, 14, 16, 18, 20] as const;
 export type LeagueSize = (typeof LEAGUE_SIZES)[number];
 
@@ -96,16 +98,7 @@ export function parseCount(text: string): number {
   return /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
 }
 
-export function createLeagueId(
-  now: () => number = Date.now,
-  random: () => number = Math.random,
-): string {
-  const time = Math.floor(now()).toString(36);
-  const salt = Math.floor(random() * 36 ** 6)
-    .toString(36)
-    .padStart(6, '0');
-  return `${time}-${salt}`;
-}
+export const createLeagueId = createId;
 
 /** True when a stored document has the shape and values of a saved league. */
 export function isLeague(value: unknown): value is League {
