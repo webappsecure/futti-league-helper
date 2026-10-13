@@ -1,5 +1,5 @@
 import type { League } from './league';
-import { listLeagues, type LeagueResult } from './league-repository';
+import { listLeagues } from './league-repository';
 import { chainLeagueIds, linkProblem } from './league-links';
 import { FRANCHISE_COLLECTION } from '@/teams/franchise-repository';
 import { findDuplicateName, identityForSeason, isFranchise, type Franchise } from '@/teams/franchise';
@@ -16,21 +16,28 @@ export type LinkResult = { ok: true } | { ok: false; error: LinkError };
 const OK: LinkResult = { ok: true };
 const refuse = (message: string): LinkResult => ({ ok: false, error: { kind: 'link', message } });
 
-function fromListing(result: LeagueResult<unknown>): LinkResult | null {
-  if (result.ok) return null;
-  const { error } = result;
-  return { ok: false, error: error.kind === 'storage' ? error : { kind: 'storage', error: new Error('Could not read leagues.') } };
+type Pair = { ok: true; leagues: League[]; upper: League; lower: League } | { ok: false; result: LinkResult };
+
+/** Loads every league and picks the two named ones, or the failure to return as is. */
+async function loadPair(db: Database, upperId: string, lowerId: string): Promise<Pair> {
+  const listed = await listLeagues(db);
+  if (!listed.ok) {
+    const { error } = listed;
+    const failure = error.kind === 'storage' ? error : { kind: 'storage' as const, error: new Error('Could not read leagues.') };
+    return { ok: false, result: { ok: false, error: failure } };
+  }
+  const { leagues } = listed.value;
+  const upper = leagues.find((l) => l.id === upperId);
+  const lower = leagues.find((l) => l.id === lowerId);
+  if (!upper || !lower) return { ok: false, result: { ok: false, error: { kind: 'not-found' } } };
+  return { ok: true, leagues, upper, lower };
 }
 
 /** Links `upper` directly above `lower`. Rules are re-checked on fresh data; both sides are written together. */
 export async function linkLeagues(db: Database, upperId: string, lowerId: string): Promise<LinkResult> {
-  const listed = await listLeagues(db);
-  const failed = fromListing(listed);
-  if (failed || !listed.ok) return failed as LinkResult;
-  const { leagues } = listed.value;
-  const upper = leagues.find((l) => l.id === upperId);
-  const lower = leagues.find((l) => l.id === lowerId);
-  if (!upper || !lower) return { ok: false, error: { kind: 'not-found' } };
+  const pair = await loadPair(db, upperId, lowerId);
+  if (!pair.ok) return pair.result;
+  const { leagues, upper, lower } = pair;
 
   const problem = linkProblem(upper, lower, leagues);
   if (problem) return refuse(problem);
@@ -59,13 +66,9 @@ export async function linkLeagues(db: Database, upperId: string, lowerId: string
 
 /** Removes the link between `upper` and `lower` from both sides. */
 export async function unlinkLeagues(db: Database, upperId: string, lowerId: string): Promise<LinkResult> {
-  const listed = await listLeagues(db);
-  const failed = fromListing(listed);
-  if (failed || !listed.ok) return failed as LinkResult;
-  const { leagues } = listed.value;
-  const upper = leagues.find((l) => l.id === upperId);
-  const lower = leagues.find((l) => l.id === lowerId);
-  if (!upper || !lower) return { ok: false, error: { kind: 'not-found' } };
+  const pair = await loadPair(db, upperId, lowerId);
+  if (!pair.ok) return pair.result;
+  const { upper, lower } = pair;
 
   const { leagueBelowId: _below, ...upperRest } = upper;
   const { leagueAboveId: _above, ...lowerRest } = lower;

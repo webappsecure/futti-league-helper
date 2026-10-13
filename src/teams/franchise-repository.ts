@@ -43,6 +43,19 @@ async function listChainTeams(
   return done({ teams, linked: ids.length > 1 });
 }
 
+/** The field error for a team name already used in this league's chain, null when free, or a storage failure. */
+async function chainDuplicateError(
+  db: Database,
+  league: League,
+  name: string,
+  exceptId?: string,
+): Promise<FranchiseResult<FranchiseFieldErrors | null>> {
+  const chain = await listChainTeams(db, league);
+  if (!chain.ok) return chain;
+  if (!findDuplicateName(chain.value.teams, name, exceptId)) return done(null);
+  return done({ name: chain.value.linked ? DUPLICATE_LINKED : DUPLICATE });
+}
+
 export async function listFranchises(
   db: Database,
   league: League,
@@ -78,12 +91,9 @@ export async function createFranchise(
   const listed = await listFranchises(db, league);
   if (!listed.ok) return listed;
   if (listed.value.teams.length >= league.size) return { ok: false, error: { kind: 'full' } };
-  const chain = await listChainTeams(db, league);
-  if (!chain.ok) return chain;
-  if (findDuplicateName(chain.value.teams, checked.value.identity.name)) {
-    const name = chain.value.linked ? DUPLICATE_LINKED : DUPLICATE;
-    return { ok: false, error: { kind: 'validation', fields: { name } } };
-  }
+  const duplicate = await chainDuplicateError(db, league, checked.value.identity.name);
+  if (!duplicate.ok) return duplicate;
+  if (duplicate.value) return { ok: false, error: { kind: 'validation', fields: duplicate.value } };
   const franchise: Franchise = {
     id: newId(),
     leagueId: league.id,
@@ -108,12 +118,9 @@ export async function updateFranchise(
   if (!listed.ok) return listed;
   const existing = listed.value.teams.find((t) => t.id === id);
   if (!existing) return { ok: false, error: { kind: 'not-found' } };
-  const chain = await listChainTeams(db, league);
-  if (!chain.ok) return chain;
-  if (findDuplicateName(chain.value.teams, checked.value.identity.name, id)) {
-    const name = chain.value.linked ? DUPLICATE_LINKED : DUPLICATE;
-    return { ok: false, error: { kind: 'validation', fields: { name } } };
-  }
+  const duplicate = await chainDuplicateError(db, league, checked.value.identity.name, id);
+  if (!duplicate.ok) return duplicate;
+  if (duplicate.value) return { ok: false, error: { kind: 'validation', fields: duplicate.value } };
   const franchise: Franchise = {
     ...existing,
     initialGrade: checked.value.initialGrade,

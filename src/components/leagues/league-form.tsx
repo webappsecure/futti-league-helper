@@ -143,6 +143,7 @@ export function LeagueForm({ initial, onSaved, onCancel }: LeagueFormProps) {
             thumbColor="#ffffff"
           />
         </ThemedView>
+        <FieldError text={errors.counts} />
       </ThemedView>
 
       {relegation && (
@@ -171,7 +172,6 @@ export function LeagueForm({ initial, onSaved, onCancel }: LeagueFormProps) {
               <FieldError text={errors.demotedCount} />
             </ThemedView>
           </ThemedView>
-          <FieldError text={errors.counts} />
         </ThemedView>
       )}
 
