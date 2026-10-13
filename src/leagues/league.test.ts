@@ -140,6 +140,13 @@ describe('isLeague', () => {
     expect(isLeague(league)).toBe(true);
   });
 
+  it('accepts valid link ids and rejects empty or non-string ones', () => {
+    expect(isLeague({ ...league, leagueAboveId: 'b-2', leagueBelowId: 'c-3' })).toBe(true);
+    expect(isLeague({ ...league, leagueAboveId: '' })).toBe(false);
+    expect(isLeague({ ...league, leagueBelowId: 5 })).toBe(false);
+    expect(isLeague({ ...league, leagueBelowId: null })).toBe(false);
+  });
+
   it('rejects other shapes and values', () => {
     expect(isLeague(null)).toBe(false);
     expect(isLeague('text')).toBe(false);

@@ -79,6 +79,8 @@ export default function LeaguesScreen() {
       <LeagueDetail
         key={selected.id}
         league={selected}
+        leagues={leagues}
+        onLinksChanged={refresh}
         confirmingDelete={mode === 'confirm-delete'}
         deleting={deleting}
         deleteError={deleteError}

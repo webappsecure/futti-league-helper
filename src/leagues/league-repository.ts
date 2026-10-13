@@ -1,8 +1,9 @@
-import { createLeagueId, isLeague, validateLeagueInput, type FieldErrors, type League, type LeagueInput } from './league';
+import { LEAGUE_COLLECTION, createLeagueId, isLeague, validateLeagueInput, type FieldErrors, type League, type LeagueInput } from './league';
+import { leagueAbove, leagueBelow, linkedEditProblems } from './league-links';
 import type { Database, Op } from '@/storage/types';
 import { FRANCHISE_COLLECTION } from '@/teams/franchise-repository';
 
-const COLLECTION = 'leagues';
+const COLLECTION = LEAGUE_COLLECTION;
 
 export type LeagueError =
   | { kind: 'validation'; fields: FieldErrors }
@@ -67,6 +68,20 @@ export async function updateLeague(
   const existing = await getLeague(db, id);
   if (!existing.ok) return existing;
   if (existing.value === null) return { ok: false, error: { kind: 'not-found' } };
+  const links: Pick<League, 'leagueAboveId' | 'leagueBelowId'> = {};
+  if (existing.value.leagueAboveId) links.leagueAboveId = existing.value.leagueAboveId;
+  if (existing.value.leagueBelowId) links.leagueBelowId = existing.value.leagueBelowId;
+  if (links.leagueAboveId || links.leagueBelowId) {
+    const all = await listLeagues(db);
+    if (!all.ok) return all;
+    const draft: League = { id, ...checked.value, ...links };
+    const fields = linkedEditProblems(
+      draft,
+      leagueAbove(existing.value, all.value.leagues),
+      leagueBelow(existing.value, all.value.leagues),
+    );
+    if (Object.keys(fields).length > 0) return { ok: false, error: { kind: 'validation', fields } };
+  }
   const stored = await db.list<{ leagueId?: unknown }>(FRANCHISE_COLLECTION);
   if (!stored.ok) return storage(stored.error);
   const teamCount = stored.value.filter((doc) => doc.value?.leagueId === id).length;
@@ -77,7 +92,7 @@ export async function updateLeague(
       error: { kind: 'validation', fields: { size: `This league has ${teamCount} ${noun}. Remove teams first or choose ${teamCount} or more.` } },
     };
   }
-  const league: League = { id, ...checked.value };
+  const league: League = { id, ...checked.value, ...links };
   const written = await db.batch([{ type: 'put', collection: COLLECTION, id, value: league }]);
   return written.ok ? done(league) : storage(written.error);
 }
@@ -88,6 +103,23 @@ export async function deleteLeague(db: Database, id: string): Promise<LeagueResu
   const teamOps = stored.value
     .filter((doc) => doc.value?.leagueId === id)
     .map((doc): Op => ({ type: 'delete', collection: FRANCHISE_COLLECTION, id: doc.id }));
-  const removed = await db.batch([...teamOps, { type: 'delete', collection: COLLECTION, id }]);
+  const all = await listLeagues(db);
+  if (!all.ok) return all;
+  const unlinkOps = all.value.leagues
+    .filter((l) => l.leagueAboveId === id || l.leagueBelowId === id)
+    .map((l): Op => {
+      const { leagueAboveId, leagueBelowId, ...rest } = l;
+      return {
+        type: 'put',
+        collection: COLLECTION,
+        id: l.id,
+        value: {
+          ...rest,
+          ...(leagueAboveId && leagueAboveId !== id ? { leagueAboveId } : {}),
+          ...(leagueBelowId && leagueBelowId !== id ? { leagueBelowId } : {}),
+        },
+      };
+    });
+  const removed = await db.batch([...teamOps, ...unlinkOps, { type: 'delete', collection: COLLECTION, id }]);
   return removed.ok ? done(undefined) : storage(removed.error);
 }

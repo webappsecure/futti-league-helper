@@ -1,5 +1,6 @@
 import { createId } from '@/leagues/ids';
-import type { League } from '@/leagues/league';
+import { LEAGUE_COLLECTION, isLeague, type League } from '@/leagues/league';
+import { chainLeagueIds } from '@/leagues/league-links';
 import type { Database } from '@/storage/types';
 import {
   displayName,
@@ -24,6 +25,23 @@ export type FranchiseResult<T> = { ok: true; value: T } | { ok: false; error: Fr
 const done = <T>(value: T): FranchiseResult<T> => ({ ok: true, value });
 const storage = (error: Error): FranchiseResult<never> => ({ ok: false, error: { kind: 'storage', error } });
 const DUPLICATE = 'A team with this name already exists in this league.';
+const DUPLICATE_LINKED = 'A team with this name already exists in this league or a linked league.';
+
+/** Teams in every league of this league's linked chain (just this league's when unlinked). */
+async function listChainTeams(
+  db: Database,
+  league: League,
+): Promise<FranchiseResult<{ teams: Franchise[]; linked: boolean }>> {
+  const leagues = await db.list<unknown>(LEAGUE_COLLECTION);
+  if (!leagues.ok) return storage(leagues.error);
+  const known = leagues.value.map((doc) => doc.value).filter(isLeague);
+  const current = known.find((l) => l.id === league.id) ?? league;
+  const ids = chainLeagueIds(current, known);
+  const stored = await db.list<unknown>(FRANCHISE_COLLECTION);
+  if (!stored.ok) return storage(stored.error);
+  const teams = stored.value.map((doc) => doc.value).filter(isFranchise).filter((t) => ids.includes(t.leagueId));
+  return done({ teams, linked: ids.length > 1 });
+}
 
 export async function listFranchises(
   db: Database,
@@ -60,8 +78,11 @@ export async function createFranchise(
   const listed = await listFranchises(db, league);
   if (!listed.ok) return listed;
   if (listed.value.teams.length >= league.size) return { ok: false, error: { kind: 'full' } };
-  if (findDuplicateName(listed.value.teams, checked.value.identity.name)) {
-    return { ok: false, error: { kind: 'validation', fields: { name: DUPLICATE } } };
+  const chain = await listChainTeams(db, league);
+  if (!chain.ok) return chain;
+  if (findDuplicateName(chain.value.teams, checked.value.identity.name)) {
+    const name = chain.value.linked ? DUPLICATE_LINKED : DUPLICATE;
+    return { ok: false, error: { kind: 'validation', fields: { name } } };
   }
   const franchise: Franchise = {
     id: newId(),
@@ -87,8 +108,11 @@ export async function updateFranchise(
   if (!listed.ok) return listed;
   const existing = listed.value.teams.find((t) => t.id === id);
   if (!existing) return { ok: false, error: { kind: 'not-found' } };
-  if (findDuplicateName(listed.value.teams, checked.value.identity.name, id)) {
-    return { ok: false, error: { kind: 'validation', fields: { name: DUPLICATE } } };
+  const chain = await listChainTeams(db, league);
+  if (!chain.ok) return chain;
+  if (findDuplicateName(chain.value.teams, checked.value.identity.name, id)) {
+    const name = chain.value.linked ? DUPLICATE_LINKED : DUPLICATE;
+    return { ok: false, error: { kind: 'validation', fields: { name } } };
   }
   const franchise: Franchise = {
     ...existing,

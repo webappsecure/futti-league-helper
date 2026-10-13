@@ -113,8 +113,22 @@ export function TeamsSection({ league, state, refresh, onRetry }: TeamsSectionPr
                         Grade {team.initialGrade}
                       </ThemedText>
                     </ThemedView>
+                    {!confirming && (
+                      <ThemedView style={styles.actions}>
+                        <Button label="Edit" accessibilityLabel={`Edit ${label}`} onPress={() => setMode({ kind: 'edit', team })} />
+                        <Button
+                          label="Delete"
+                          accessibilityLabel={`Delete ${label}`}
+                          variant="danger"
+                          onPress={() => {
+                            setDeleteError(null);
+                            setMode({ kind: 'confirm-delete', team });
+                          }}
+                        />
+                      </ThemedView>
+                    )}
                   </ThemedView>
-                  {confirming ? (
+                  {confirming && (
                     <>
                       <ThemedText accessibilityRole="alert">Delete {label}? This cannot be undone.</ThemedText>
                       {deleteError !== null && (
@@ -127,19 +141,6 @@ export function TeamsSection({ league, state, refresh, onRetry }: TeamsSectionPr
                         <Button label="Cancel" disabled={deleting} onPress={list} />
                       </ThemedView>
                     </>
-                  ) : (
-                    <ThemedView style={styles.actions}>
-                      <Button label="Edit" accessibilityLabel={`Edit ${label}`} onPress={() => setMode({ kind: 'edit', team })} />
-                      <Button
-                        label="Delete"
-                        accessibilityLabel={`Delete ${label}`}
-                        variant="danger"
-                        onPress={() => {
-                          setDeleteError(null);
-                          setMode({ kind: 'confirm-delete', team });
-                        }}
-                      />
-                    </ThemedView>
                   )}
                 </ThemedView>
               );

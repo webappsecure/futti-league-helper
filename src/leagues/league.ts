@@ -7,6 +7,7 @@ export const NAMING_STYLES = ['cityAndName', 'nameOnly'] as const;
 export type NamingStyle = (typeof NAMING_STYLES)[number];
 
 export const NAME_MAX_LENGTH = 60;
+export const LEAGUE_COLLECTION = 'leagues';
 
 export interface League {
   id: string;
@@ -16,6 +17,9 @@ export interface League {
   relegation: boolean;
   promotedCount: number;
   demotedCount: number;
+  /** Set on both sides of a link; omitted when unlinked. */
+  leagueAboveId?: string;
+  leagueBelowId?: string;
 }
 
 /** Raw form values; size and naming style are null until chosen. */
@@ -109,6 +113,9 @@ export function isLeague(value: unknown): value is League {
   if (typeof v.size !== 'number' || typeof v.promotedCount !== 'number') return false;
   if (typeof v.demotedCount !== 'number') return false;
   if (typeof v.namingStyle !== 'string') return false;
+  for (const link of [v.leagueAboveId, v.leagueBelowId]) {
+    if (link !== undefined && (typeof link !== 'string' || link.length === 0)) return false;
+  }
   const result = validateLeagueInput({
     name: v.name,
     size: v.size,

@@ -109,3 +109,42 @@ describe('franchise repository', () => {
     expect(r).toEqual({ ok: true, value: { teams: [], unreadable: 1 } });
   });
 });
+
+describe('team names across linked leagues', () => {
+  const linked = (id: string, o: Partial<League> = {}): League => ({ ...league, id, relegation: true, promotedCount: 1, demotedCount: 1, ...o });
+  const a = linked('A', { leagueBelowId: 'B' });
+  const b = linked('B', { leagueAboveId: 'A', leagueBelowId: 'C' });
+  const c = linked('C', { leagueAboveId: 'B' });
+  const lone = linked('Z');
+
+  it('refuses a duplicate in a linked league on create and update', async () => {
+    const db = createMemoryDatabase();
+    await db.batch([a, b, c, lone].map((l) => ({ type: 'put' as const, collection: 'leagues', id: l.id, value: l })));
+    await add(db, b, { name: 'Rovers' });
+    const created = await createFranchise(db, a, input({ name: 'rovers' }));
+    expect(created).toEqual({
+      ok: false,
+      error: { kind: 'validation', fields: { name: 'A team with this name already exists in this league or a linked league.' } },
+    });
+    const other = await add(db, a, { name: 'Other' });
+    expect((await updateFranchise(db, a, other.id, input({ name: 'Rovers' }))).ok).toBe(false);
+    expect((await updateFranchise(db, a, other.id, input({ name: 'Other', primaryColor: '#000000' }))).ok).toBe(true);
+  });
+
+  it('checks across a three-league chain but not an unlinked league', async () => {
+    const db = createMemoryDatabase();
+    await db.batch([a, b, c, lone].map((l) => ({ type: 'put' as const, collection: 'leagues', id: l.id, value: l })));
+    await add(db, c, { name: 'Rovers' });
+    expect((await createFranchise(db, a, input({ name: 'Rovers' }))).ok).toBe(false);
+    expect((await createFranchise(db, lone, input({ name: 'Rovers' }))).ok).toBe(true);
+  });
+
+  it('keeps the plain message for an unlinked league', async () => {
+    const db = createMemoryDatabase();
+    await add(db, league, { name: 'Rovers' });
+    const r = await createFranchise(db, league, input({ name: 'Rovers' }));
+    expect(r.ok === false && r.error.kind === 'validation' && r.error.fields.name).toBe(
+      'A team with this name already exists in this league.',
+    );
+  });
+});
