@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { Button } from '@/components/button';
-import { playerLine } from '@/components/rosters/roster-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Accent, Spacing } from '@/constants/theme';
 import type { League } from '@/leagues/league';
+import { playerLine } from '@/rosters/player-line';
 import type { Roster } from '@/rosters/roster';
-import { acceptLeague, type AcceptError } from '@/seasons/accept-league';
+import { acceptErrorText, acceptLeague } from '@/seasons/accept-league';
 import { useDatabase } from '@/storage/storage-provider';
 import { displayName, type Franchise } from '@/teams/franchise';
 
@@ -18,23 +18,6 @@ interface LeagueReviewProps {
   rosters: Roster[];
   onAccepted: () => Promise<void>;
   onBack: () => void;
-}
-
-export function acceptErrorText(error: AcceptError): string {
-  switch (error.kind) {
-    case 'already-accepted':
-      return 'This league has already been accepted.';
-    case 'incomplete':
-      return `This league has ${error.teams} of ${error.size} teams. Add the rest before accepting.`;
-    case 'missing-rosters':
-      return error.count === 1
-        ? '1 team has no roster. Generate rosters before accepting.'
-        : `${error.count} teams have no roster. Generate rosters before accepting.`;
-    case 'unreadable':
-      return 'A saved team or roster could not be read, so the league cannot be accepted.';
-    case 'storage':
-      return error.error.message;
-  }
 }
 
 export function LeagueReview({ league, teams, rosters, onAccepted, onBack }: LeagueReviewProps) {

@@ -1,6 +1,7 @@
 import { LEAGUE_COLLECTION, createLeagueId, isLeague, validateLeagueInput, type FieldErrors, type League, type LeagueInput } from './league';
 import { leagueAbove, leagueBelow, linkedEditProblems } from './league-links';
 import type { Database, Op } from '@/storage/types';
+import { getLeagueSeason } from '@/seasons/season-repository';
 import { ROSTER_COLLECTION } from '@/rosters/roster';
 import { SEASON_COLLECTION, isSeason } from '@/seasons/season';
 import { FRANCHISE_COLLECTION } from '@/teams/franchise-repository';
@@ -70,6 +71,16 @@ export async function updateLeague(
   const existing = await getLeague(db, id);
   if (!existing.ok) return existing;
   if (existing.value === null) return { ok: false, error: { kind: 'not-found' } };
+  const season = await getLeagueSeason(db, id);
+  if (!season.ok) return storage(season.error);
+  if (season.value !== null) {
+    const fields: FieldErrors = {};
+    if (checked.value.size !== existing.value.size) fields.size = 'Size is locked once the league is accepted.';
+    if (checked.value.namingStyle !== existing.value.namingStyle) {
+      fields.namingStyle = 'Team name style is locked once the league is accepted.';
+    }
+    if (Object.keys(fields).length > 0) return { ok: false, error: { kind: 'validation', fields } };
+  }
   const links: Pick<League, 'leagueAboveId' | 'leagueBelowId'> = {};
   if (existing.value.leagueAboveId) links.leagueAboveId = existing.value.leagueAboveId;
   if (existing.value.leagueBelowId) links.leagueBelowId = existing.value.leagueBelowId;

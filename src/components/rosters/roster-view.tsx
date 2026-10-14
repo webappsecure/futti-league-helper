@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Accent, Spacing } from '@/constants/theme';
 import type { League } from '@/leagues/league';
+import { playerLine } from '@/rosters/player-line';
 import type { Roster, RosterPlayer } from '@/rosters/roster';
 import { rerollPlayer, rerollTeam, type RosterError, type RosterResult } from '@/rosters/roster-repository';
 import { LOCKED_TEXT } from '@/seasons/season';
@@ -35,26 +36,6 @@ export function rosterErrorText(error: RosterError): string {
     case 'storage':
       return error.error.message;
   }
-}
-
-function stars(count: number): string {
-  return count === 0 ? '-' : '★'.repeat(count);
-}
-
-/** One-line player summary plus a screen-reader variant that spells out the control stars. */
-export function playerLine(player: RosterPlayer): { label: string; details: string; spoken?: string } {
-  if (player.kind === 'goalie') {
-    return {
-      label: `${player.name} (G)`,
-      details: `Age ${player.age} · GO ${player.goaltending} · SP ${player.sportsmanship}`,
-    };
-  }
-  const base = `Age ${player.age} · OF ${player.offense} · DE ${player.defense} · SP ${player.sportsmanship}`;
-  return {
-    label: player.name,
-    details: `${base} · CO ${stars(player.controlStars)}`,
-    spoken: `${base} · ${player.controlStars} control stars`,
-  };
 }
 
 function PlayerRow({

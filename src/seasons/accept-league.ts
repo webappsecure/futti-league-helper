@@ -45,3 +45,20 @@ export async function acceptLeague(
   const written = await db.batch([{ type: 'put', collection: SEASON_COLLECTION, id: season.id, value: season }]);
   return written.ok ? { ok: true, value: season } : storage(written.error);
 }
+
+export function acceptErrorText(error: AcceptError): string {
+  switch (error.kind) {
+    case 'already-accepted':
+      return 'This league has already been accepted.';
+    case 'incomplete':
+      return `This league has ${error.teams} of ${error.size} teams. Add the rest before accepting.`;
+    case 'missing-rosters':
+      return error.count === 1
+        ? '1 team has no roster. Generate rosters before accepting.'
+        : `${error.count} teams have no roster. Generate rosters before accepting.`;
+    case 'unreadable':
+      return 'A saved team or roster could not be read, so the league cannot be accepted.';
+    case 'storage':
+      return error.error.message;
+  }
+}

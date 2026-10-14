@@ -8,6 +8,8 @@ import {
 } from './league-repository';
 import { listFranchises, createFranchise } from '@/teams/franchise-repository';
 import { createMemoryDatabase } from '@/storage/memory-database';
+import { SEASON_COLLECTION } from '@/seasons/season';
+import type { Database } from '@/storage/types';
 
 const input = (overrides: Partial<LeagueInput> = {}): LeagueInput => ({
   name: 'Premier',
@@ -160,5 +162,55 @@ describe('league repository with teams', () => {
     const { db, league } = await withTeams(10);
     expect((await updateLeague(db, league.id, input({ size: 10 }))).ok).toBe(true);
     expect((await updateLeague(db, league.id, input({ size: 12 }))).ok).toBe(true);
+  });
+});
+
+describe('league repository with an accepted league', () => {
+  async function accepted() {
+    const db = createMemoryDatabase();
+    const league = await created(db, { size: 10, relegation: true, promotedCount: 1, demotedCount: 1 });
+    await db.batch([
+      { type: 'put', collection: SEASON_COLLECTION, id: 's1', value: { id: 's1', leagueId: league.id, index: 1, status: 'active' } },
+    ]);
+    return { db, league };
+  }
+  const base = { size: 10 as const, relegation: true, promotedCount: 1, demotedCount: 1 };
+
+  it('refuses a size change and writes nothing', async () => {
+    const { db, league } = await accepted();
+    const result = await updateLeague(db, league.id, input({ ...base, size: 12 }));
+    expect(result).toEqual({ ok: false, error: { kind: 'validation', fields: { size: expect.any(String) } } });
+    expect(await getLeague(db, league.id)).toEqual({ ok: true, value: league });
+  });
+
+  it('refuses a naming style change and reports both locked fields together', async () => {
+    const { db, league } = await accepted();
+    const style = await updateLeague(db, league.id, input({ ...base, namingStyle: 'cityAndName' }));
+    expect(style).toEqual({ ok: false, error: { kind: 'validation', fields: { namingStyle: expect.any(String) } } });
+    const both = await updateLeague(db, league.id, input({ ...base, size: 12, namingStyle: 'cityAndName' }));
+    expect(both.ok === false && both.error.kind === 'validation' && Object.keys(both.error.fields).sort()).toEqual(['namingStyle', 'size']);
+    expect(await getLeague(db, league.id)).toEqual({ ok: true, value: league });
+  });
+
+  it('still allows name and relegation changes', async () => {
+    const { db, league } = await accepted();
+    const result = await updateLeague(db, league.id, input({ ...base, name: 'Renamed', promotedCount: 2 }));
+    expect(result.ok && result.value).toMatchObject({ name: 'Renamed', promotedCount: 2, size: 10 });
+  });
+
+  it('returns a storage error when the season lookup fails', async () => {
+    const { db, league } = await accepted();
+    const broken: Database = {
+      ...db,
+      list: async (collection) => (collection === SEASON_COLLECTION ? { ok: false, error: new Error('boom') } : db.list(collection)),
+    };
+    const result = await updateLeague(broken, league.id, input({ ...base, name: 'Renamed' }));
+    expect(result.ok === false && result.error.kind).toBe('storage');
+  });
+
+  it('does not lock a league that has no season', async () => {
+    const { db } = await accepted();
+    const other = await created(db, { name: 'Second', size: 8 }, () => 'other-1');
+    expect((await updateLeague(db, other.id, input({ name: 'Second', size: 12 }))).ok).toBe(true);
   });
 });

@@ -16,6 +16,7 @@ import { useDatabase } from '@/storage/storage-provider';
 import { displayName, type Franchise } from '@/teams/franchise';
 import { deleteFranchise } from '@/teams/franchise-repository';
 import type { FranchisesState } from '@/teams/use-franchises';
+import { teamControls } from './team-controls';
 import { TeamForm } from './team-form';
 
 interface TeamsSectionProps {
@@ -117,11 +118,21 @@ export function TeamsSection({ league, state, refresh, onRetry, season, refreshS
   }
 
   const teams = state.status === 'ready' ? state.teams : [];
-  const full = teams.length >= league.size;
   const rosterList = rosters.state.status === 'ready' ? rosters.state.rosters : [];
   const hasRoster = (id: string) => rosterList.some((r) => r.franchiseId === id);
   const rostersReady = state.status === 'ready' && rosters.state.status === 'ready';
   const missingRosters = teams.filter((t) => !hasRoster(t.id)).length;
+  const controls = teamControls({
+    accepted,
+    seasonKnown,
+    teamsReady: state.status === 'ready',
+    rostersReady,
+    busy: rosterBusy,
+    teamCount: teams.length,
+    size: league.size,
+    rosterCount: rosterList.length,
+    missingRosters,
+  });
 
   return (
     <ThemedView style={styles.container}>
@@ -140,43 +151,43 @@ export function TeamsSection({ league, state, refresh, onRetry, season, refreshS
           <Button label="Retry" onPress={onRetrySeason} />
         </ThemedView>
       )}
-      {!accepted && (
+      {controls.showActions && (
         <ThemedView style={styles.actions}>
           <Button
             label="Add team"
             variant="primary"
-            disabled={state.status !== 'ready' || !seasonKnown || full}
+            disabled={!controls.addEnabled}
             onPress={() => show({ kind: 'add' })}
           />
         </ThemedView>
       )}
-      {full && !accepted && state.status === 'ready' && (
+      {controls.full && controls.showActions && state.status === 'ready' && (
         <ThemedText type="small" themeColor="textSecondary">
           This league is full.
         </ThemedText>
       )}
 
-      {!accepted && (
+      {controls.showActions && (
         <ThemedView style={styles.actions}>
           <Button
             label="Generate rosters"
-            disabled={!rostersReady || !seasonKnown || rosterBusy || missingRosters === 0}
+            disabled={!controls.generateEnabled}
             onPress={() => runRosters(generateLeagueRosters)}
           />
           <Button
             label="Reroll all rosters"
-            disabled={!rostersReady || !seasonKnown || rosterBusy || rosterList.length === 0}
+            disabled={!controls.rerollAllEnabled}
             onPress={() => setConfirmingReroll(true)}
           />
           <Button
             label="Review and accept"
             variant="primary"
-            disabled={!rostersReady || !seasonKnown || rosterBusy || teams.length === 0}
+            disabled={!controls.reviewEnabled}
             onPress={() => show({ kind: 'review' })}
           />
         </ThemedView>
       )}
-      {confirmingReroll && !accepted && (
+      {confirmingReroll && controls.showActions && (
         <ThemedView type="backgroundElement" style={styles.card}>
           <ThemedText accessibilityRole="alert">
             Replace every roster in this league? Current values are discarded.
@@ -248,18 +259,18 @@ export function TeamsSection({ league, state, refresh, onRetry, season, refreshS
                         {hasRoster(team.id) && (
                           <Button label="Roster" accessibilityLabel={`Roster for ${label}`} onPress={() => show({ kind: 'roster', team })} />
                         )}
-                        {!accepted && (
+                        {controls.showActions && (
                           <>
-                        <Button label="Edit" accessibilityLabel={`Edit ${label}`} onPress={() => show({ kind: 'edit', team })} />
-                        <Button
-                          label="Delete"
-                          accessibilityLabel={`Delete ${label}`}
-                          variant="danger"
-                          onPress={() => {
-                            setDeleteError(null);
-                            setMode({ kind: 'confirm-delete', team });
-                          }}
-                        />
+                            <Button label="Edit" accessibilityLabel={`Edit ${label}`} onPress={() => show({ kind: 'edit', team })} />
+                            <Button
+                              label="Delete"
+                              accessibilityLabel={`Delete ${label}`}
+                              variant="danger"
+                              onPress={() => {
+                                setDeleteError(null);
+                                setMode({ kind: 'confirm-delete', team });
+                              }}
+                            />
                           </>
                         )}
                       </ThemedView>
