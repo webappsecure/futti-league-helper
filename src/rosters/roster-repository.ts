@@ -3,6 +3,7 @@ import { NAME_POOL } from '@/names/name-pool';
 import { getBurnedNames } from '@/names/name-registry';
 import { pickRandomName } from '@/names/pick-name';
 import type { Rng } from '@/rules/dice';
+import { acceptQueue } from '@/seasons/accept-queue';
 import { getLeagueSeason } from '@/seasons/season-repository';
 import type { Database, Op } from '@/storage/types';
 import type { Franchise } from '@/teams/franchise';
@@ -11,6 +12,7 @@ import {
   generateRoster,
   isRoster,
   NamesExhaustedError,
+  renamePlayer as renameRosterPlayer,
   rerollPlayer as rerollRosterPlayer,
   ROSTER_COLLECTION,
   type PickName,
@@ -21,6 +23,8 @@ export type RosterError =
   | { kind: 'no-teams' }
   | { kind: 'not-found' }
   | { kind: 'no-names' }
+  | { kind: 'invalid-name' }
+  | { kind: 'name-taken' }
   | { kind: 'locked' }
   | { kind: 'storage'; error: Error };
 
@@ -213,4 +217,37 @@ export async function rerollPlayer(
   if (!made.ok) return made;
   const written = await write(db, [made.value as Roster]);
   return written.ok ? done(made.value as Roster) : written;
+}
+
+/** Gives one player a typed last name; invalid, burned and already-used names are rejected and nothing is written. */
+export function renamePlayer(
+  db: Database,
+  league: League,
+  franchiseId: string,
+  playerId: string,
+  rawName: string,
+): Promise<RosterResult<Roster>> {
+  return acceptQueue(() => rename(db, league, franchiseId, playerId, rawName));
+}
+
+async function rename(
+  db: Database,
+  league: League,
+  franchiseId: string,
+  playerId: string,
+  rawName: string,
+): Promise<RosterResult<Roster>> {
+  const locked = await lockFailure(db, league);
+  if (locked) return locked;
+  const loaded = await loadTeam(db, league, franchiseId);
+  if (!loaded.ok) return loaded;
+  const { roster } = loaded.value;
+  const used = await unavailableNames(db, (r) =>
+    r.players.filter((p) => !(r.franchiseId === franchiseId && p.id === playerId)).map((p) => p.name),
+  );
+  if (!used.ok) return used;
+  const renamed = renameRosterPlayer(roster, playerId, rawName, used.value);
+  if (!renamed.ok) return fail(renamed.error);
+  const written = await write(db, [renamed.value]);
+  return written.ok ? done(renamed.value) : written;
 }

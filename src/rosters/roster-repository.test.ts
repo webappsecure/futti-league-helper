@@ -10,8 +10,10 @@ import {
   listRosters,
   rerollLeague,
   rerollPlayer,
+  renamePlayer,
   rerollTeam,
 } from './roster-repository';
+import type { Database } from '@/storage/types';
 
 const league: League = { id: 'L1', name: 'Premier', size: 6, namingStyle: 'cityAndName', relegation: false, promotedCount: 0, demotedCount: 0 };
 const other: League = { ...league, id: 'L2', name: 'Second' };
@@ -195,5 +197,108 @@ describe('cascade deletes', () => {
     expect(r.ok).toBe(true);
     const stored = await db.list(ROSTER_COLLECTION);
     expect(stored.ok && stored.value.map((d) => d.id)).toEqual([c.id]);
+  });
+});
+
+describe('renamePlayer', () => {
+  async function rostered() {
+    const db = await setup();
+    const a = await addTeam(db, league, 'A');
+    const b = await addTeam(db, league, 'B');
+    const c = await addTeam(db, other, 'C');
+    await generateLeagueRosters(db, league);
+    await generateLeagueRosters(db, other);
+    const all = async (l: League) => {
+      const r = await listRosters(db, l);
+      if (!r.ok) throw new Error('list');
+      return r.value.rosters;
+    };
+    return { db, a, b, c, all };
+  }
+
+  it('persists only that player\'s name', async () => {
+    const { db, a, all } = await rostered();
+    const before = (await all(league)).find((r) => r.franchiseId === a.id)!;
+    const target = before.players[1];
+    const r = await renamePlayer(db, league, a.id, target.id, 'quimby');
+    expect(r.ok).toBe(true);
+    const after = (await all(league)).find((x) => x.franchiseId === a.id)!;
+    expect(after.players[1]).toEqual({ ...target, name: 'QUIMBY' });
+    expect(after.players.filter((_, i) => i !== 1)).toEqual(before.players.filter((_, i) => i !== 1));
+  });
+
+  it('rejects a name used by another team, another league or the same roster', async () => {
+    const { db, a, b, c, all } = await rostered();
+    const rosters = await all(league);
+    const ra = rosters.find((r) => r.franchiseId === a.id)!;
+    const rb = rosters.find((r) => r.franchiseId === b.id)!;
+    const rc = (await all(other)).find((r) => r.franchiseId === c.id)!;
+    for (const taken of [rb.players[0].name, rc.players[0].name, ra.players[3].name]) {
+      expect(await renamePlayer(db, league, a.id, ra.players[0].id, taken.toLowerCase())).toEqual({
+        ok: false,
+        error: { kind: 'name-taken' },
+      });
+    }
+    expect((await all(league)).find((r) => r.franchiseId === a.id)).toEqual(ra);
+  });
+
+  it('allows keeping the current name', async () => {
+    const { db, a, all } = await rostered();
+    const ra = (await all(league)).find((r) => r.franchiseId === a.id)!;
+    const r = await renamePlayer(db, league, a.id, ra.players[0].id, ra.players[0].name);
+    expect(r.ok).toBe(true);
+  });
+
+  it('rejects a burned name', async () => {
+    const { db, a } = await rostered();
+    await burnNames(db, ['BURNED']);
+    const ra = (await listRosters(db, league)) as { ok: true; value: { rosters: Roster[] } };
+    const target = ra.value.rosters.find((r) => r.franchiseId === a.id)!.players[0];
+    expect(await renamePlayer(db, league, a.id, target.id, 'Burned')).toEqual({
+      ok: false,
+      error: { kind: 'name-taken' },
+    });
+  });
+
+  it('rejects invalid text and unknown players', async () => {
+    const { db, a, all } = await rostered();
+    const ra = (await all(league)).find((r) => r.franchiseId === a.id)!;
+    expect(await renamePlayer(db, league, a.id, ra.players[0].id, 'R2D2')).toEqual({
+      ok: false,
+      error: { kind: 'invalid-name' },
+    });
+    expect(await renamePlayer(db, league, a.id, 'nope', 'Smith')).toEqual({ ok: false, error: { kind: 'not-found' } });
+    expect(await renamePlayer(db, league, 'nope', ra.players[0].id, 'Smith')).toEqual({
+      ok: false,
+      error: { kind: 'not-found' },
+    });
+  });
+
+  it('is locked once the league is accepted', async () => {
+    const { db, a, all } = await rostered();
+    await db.batch([
+      { type: 'put', collection: 'seasons', id: 's-1', value: { id: 's-1', leagueId: league.id, index: 1, status: 'active' } },
+    ]);
+    const ra = (await all(league)).find((r) => r.franchiseId === a.id)!;
+    expect(await renamePlayer(db, league, a.id, ra.players[0].id, 'Smith')).toEqual({
+      ok: false,
+      error: { kind: 'locked' },
+    });
+  });
+
+  it('fails closed when the season lookup or burned registry cannot be read', async () => {
+    const { db, a, all } = await rostered();
+    const ra = (await all(league)).find((r) => r.franchiseId === a.id)!;
+    const brokenSeason: Database = {
+      ...db,
+      get: async (c, id) => (c === 'seasons' ? { ok: false, error: new Error('boom') } : db.get(c, id)),
+      list: async (c) => (c === 'seasons' ? { ok: false, error: new Error('boom') } : db.list(c)),
+    };
+    const s = await renamePlayer(brokenSeason, league, a.id, ra.players[0].id, 'Smith');
+    expect(s.ok === false && s.error.kind).toBe('storage');
+    await db.batch([{ type: 'put', collection: NAME_REGISTRY_COLLECTION, id: 'burned', value: { names: 'x' } }]);
+    const n = await renamePlayer(db, league, a.id, ra.players[0].id, 'Smith');
+    expect(n.ok === false && n.error.kind).toBe('storage');
+    expect((await all(league)).find((r) => r.franchiseId === a.id)).toEqual(ra);
   });
 });

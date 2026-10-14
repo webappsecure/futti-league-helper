@@ -52,7 +52,7 @@ export function LeagueReview({ league, teams, rosters, onAccepted, onBack }: Lea
       {confirming && (
         <ThemedView type="backgroundElement" style={styles.card}>
           <ThemedText accessibilityRole="alert">
-            Accept this league? Rosters are locked and become season 1. This cannot be undone.
+            Accept this league? Rosters are locked and become season 1, and every player name here becomes permanently unavailable. This cannot be undone.
           </ThemedText>
           <ThemedView style={styles.row}>
             <Button label="Accept" variant="primary" disabled={busy} onPress={accept} />

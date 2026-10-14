@@ -1,9 +1,11 @@
 import { createId } from '@/leagues/ids';
 import type { League } from '@/leagues/league';
+import { burnNamesOp, getBurnedNames } from '@/names/name-registry';
 import { listRosters } from '@/rosters/roster-repository';
 import type { Database } from '@/storage/types';
 import { listFranchises } from '@/teams/franchise-repository';
 import { SEASON_COLLECTION, type Season } from './season';
+import { acceptQueue } from './accept-queue';
 import { getLeagueSeason } from './season-repository';
 
 export type AcceptError =
@@ -11,6 +13,7 @@ export type AcceptError =
   | { kind: 'incomplete'; teams: number; size: number }
   | { kind: 'missing-rosters'; count: number }
   | { kind: 'unreadable' }
+  | { kind: 'burned-names'; names: string[] }
   | { kind: 'storage'; error: Error };
 
 export type AcceptResult = { ok: true; value: Season } | { ok: false; error: AcceptError };
@@ -18,8 +21,19 @@ export type AcceptResult = { ok: true; value: Season } | { ok: false; error: Acc
 const fail = (error: AcceptError): AcceptResult => ({ ok: false, error });
 const storage = (error: Error): AcceptResult => fail({ kind: 'storage', error });
 
-/** Accepts the league: writes season 1 as active in one batch. Locking is derived from that season existing. */
-export async function acceptLeague(
+/**
+ * Accepts the league: writes season 1 as active and burns every roster name in one batch.
+ * Locking is derived from that season existing.
+ */
+export function acceptLeague(
+  db: Database,
+  league: League,
+  newId: () => string = createId,
+): Promise<AcceptResult> {
+  return acceptQueue(() => accept(db, league, newId));
+}
+
+async function accept(
   db: Database,
   league: League,
   newId: () => string = createId,
@@ -41,8 +55,19 @@ export async function acceptLeague(
   const missing = teams.value.teams.filter((t) => !have.has(t.id)).length;
   if (missing > 0) return fail({ kind: 'missing-rosters', count: missing });
 
+  const names = rosters.value.rosters
+    .filter((r) => teams.value.teams.some((t) => t.id === r.franchiseId))
+    .flatMap((r) => r.players.map((p) => p.name));
+  const burned = await getBurnedNames(db);
+  if (!burned.ok) return storage(burned.error);
+  const clashes = names.filter((name) => burned.value.has(name));
+  if (clashes.length > 0) return fail({ kind: 'burned-names', names: clashes });
+
   const season: Season = { id: newId(), leagueId: league.id, index: 1, status: 'active' };
-  const written = await db.batch([{ type: 'put', collection: SEASON_COLLECTION, id: season.id, value: season }]);
+  const written = await db.batch([
+    { type: 'put', collection: SEASON_COLLECTION, id: season.id, value: season },
+    burnNamesOp(burned.value, names),
+  ]);
   return written.ok ? { ok: true, value: season } : storage(written.error);
 }
 
@@ -58,6 +83,8 @@ export function acceptErrorText(error: AcceptError): string {
         : `${error.count} teams have no roster. Generate rosters before accepting.`;
     case 'unreadable':
       return 'A saved team or roster could not be read, so the league cannot be accepted.';
+    case 'burned-names':
+      return `${error.names.length === 1 ? 'A player name has' : 'Some player names have'} already been burned (${error.names.join(', ')}). Rename ${error.names.length === 1 ? 'that player' : 'those players'} before accepting.`;
     case 'storage':
       return error.error.message;
   }

@@ -4,6 +4,8 @@ import {
   generateRoster,
   generateStandard,
   isRoster,
+  NAME_MAX_LENGTH,
+  renamePlayer,
   rerollPlayer,
   type Roster,
 } from './roster';
@@ -108,5 +110,62 @@ describe('isRoster', () => {
     ['missing rolls', () => { const r = clone(); delete r.players[0].rolls; return r; }],
   ])('rejects %s', (_label, make) => {
     expect(isRoster(make())).toBe(false);
+  });
+});
+
+describe('renamePlayer', () => {
+  it('normalizes the typed name and changes nothing else', () => {
+    const roster = sample();
+    const target = roster.players[2];
+    const r = renamePlayer(roster, target.id, '  de la Cruz-Ñuñez ', new Set());
+    if (!r.ok) throw new Error('rename');
+    expect(r.value.players[2]).toEqual({ ...target, name: 'DE LA CRUZ-NUNEZ' });
+    expect(r.value.players.filter((_, i) => i !== 2)).toEqual(roster.players.filter((_, i) => i !== 2));
+    expect(isRoster(r.value)).toBe(true);
+  });
+
+  it('renames a goaltender', () => {
+    const roster = sample();
+    const r = renamePlayer(roster, roster.players[7].id, 'Zed', new Set());
+    expect(r.ok && r.value.players[7]).toMatchObject({ kind: 'goalie', name: 'ZED' });
+  });
+
+  it('rejects invalid text', () => {
+    const roster = sample();
+    for (const raw of ['', '   ', 'R2D2', 'SMITH!']) {
+      expect(renamePlayer(roster, roster.players[0].id, raw, new Set())).toEqual({
+        ok: false,
+        error: { kind: 'invalid-name' },
+      });
+    }
+  });
+
+  it('rejects an unavailable name', () => {
+    const roster = sample();
+    expect(renamePlayer(roster, roster.players[0].id, 'smith', new Set(['SMITH']))).toEqual({
+      ok: false,
+      error: { kind: 'name-taken' },
+    });
+  });
+
+  it('accepts the player\'s current name', () => {
+    const roster = sample();
+    const current = roster.players[0];
+    const r = renamePlayer(roster, current.id, current.name, new Set([current.name]));
+    expect(r).toEqual({ ok: true, value: roster });
+  });
+
+  it('rejects an unknown player', () => {
+    expect(renamePlayer(sample(), 'nope', 'X', new Set())).toEqual({ ok: false, error: { kind: 'not-found' } });
+  });
+
+  it('limits the length of a typed name', () => {
+    const roster = sample();
+    const id = roster.players[0].id;
+    expect(renamePlayer(roster, id, 'A'.repeat(NAME_MAX_LENGTH), new Set()).ok).toBe(true);
+    expect(renamePlayer(roster, id, 'A'.repeat(NAME_MAX_LENGTH + 1), new Set())).toEqual({
+      ok: false,
+      error: { kind: 'invalid-name' },
+    });
   });
 });

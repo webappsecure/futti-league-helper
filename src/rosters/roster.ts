@@ -136,6 +136,32 @@ export function rerollPlayer(
   return { ...roster, players };
 }
 
+/** Longest typed last name; the longest provided name is 16. */
+export const NAME_MAX_LENGTH = 40;
+
+export type RenameError = { kind: 'invalid-name' | 'name-taken' | 'not-found' };
+
+/**
+ * Gives one player a typed last name, normalized like every stored name. `unavailable` holds every name
+ * that may not be used (burned names and other players' names); the player's own current name is always allowed.
+ */
+export function renamePlayer(
+  roster: Roster,
+  playerId: string,
+  rawName: string,
+  unavailable: ReadonlySet<string>,
+): { ok: true; value: Roster } | { ok: false; error: RenameError } {
+  const index = roster.players.findIndex((p) => p.id === playerId);
+  if (index < 0) return { ok: false, error: { kind: 'not-found' } };
+  const name = normalizeName(rawName);
+  if (name === null || name.length > NAME_MAX_LENGTH) return { ok: false, error: { kind: 'invalid-name' } };
+  const old = roster.players[index];
+  if (name !== old.name && unavailable.has(name)) return { ok: false, error: { kind: 'name-taken' } };
+  const players = roster.players.slice();
+  players[index] = { ...old, name };
+  return { ok: true, value: { ...roster, players } };
+}
+
 function isInt(value: unknown, min: number, max: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
 }

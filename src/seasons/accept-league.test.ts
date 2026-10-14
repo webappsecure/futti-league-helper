@@ -1,9 +1,11 @@
 import { LEAGUE_COLLECTION, type League } from '@/leagues/league';
+import { burnNames, getBurnedNames, NAME_REGISTRY_COLLECTION } from '@/names/name-registry';
 import { ROSTER_COLLECTION } from '@/rosters/roster';
 import { deleteLeague } from '@/leagues/league-repository';
 import {
   generateLeagueRosters,
   listRosters,
+  renamePlayer,
   rerollLeague,
   rerollPlayer,
   rerollTeam,
@@ -17,7 +19,7 @@ import {
   listFranchises,
   updateFranchise,
 } from '@/teams/franchise-repository';
-import { acceptLeague } from './accept-league';
+import { acceptLeague, acceptErrorText } from './accept-league';
 import { SEASON_COLLECTION } from './season';
 
 const league: League = { id: 'L1', name: 'Premier', size: 6, namingStyle: 'cityAndName', relegation: false, promotedCount: 0, demotedCount: 0 };
@@ -160,5 +162,101 @@ describe('locking after accept', () => {
     await acceptLeague(db, league, () => 's-1');
     expect((await deleteLeague(db, league.id)).ok).toBe(true);
     expect(await seasons(db)).toEqual([]);
+  });
+});
+
+describe('acceptLeague burning', () => {
+  const rosterNames = async (db: Database, l: League) => {
+    const r = await listRosters(db, l);
+    if (!r.ok) throw new Error('list');
+    return r.value.rosters.flatMap((x) => x.players.map((p) => p.name));
+  };
+  const burned = async (db: Database) => {
+    const r = await getBurnedNames(db);
+    if (!r.ok) throw r.error;
+    return r.value;
+  };
+
+  it('burns every roster name with the season', async () => {
+    const db = await setup(6);
+    const names = await rosterNames(db, league);
+    expect((await acceptLeague(db, league)).ok).toBe(true);
+    expect(await burned(db)).toEqual(new Set(names));
+    expect(names).toHaveLength(48);
+  });
+
+  it('does not burn names that were rerolled away', async () => {
+    const db = await setup(6);
+    const before = await rosterNames(db, league);
+    await rerollLeague(db, league);
+    const after = await rosterNames(db, league);
+    await acceptLeague(db, league);
+    const set = await burned(db);
+    expect(set).toEqual(new Set(after));
+    for (const name of before) if (!after.includes(name)) expect(set.has(name)).toBe(false);
+  });
+
+  it('burns a hand-typed name', async () => {
+    const db = await setup(6);
+    const r = await listRosters(db, league);
+    if (!r.ok) throw new Error('list');
+    const { franchiseId, players } = r.value.rosters[0];
+    await renamePlayer(db, league, franchiseId, players[0].id, 'Zzyzx');
+    await acceptLeague(db, league);
+    expect((await burned(db)).has('ZZYZX')).toBe(true);
+  });
+
+  it('keeps earlier burned names when another league is accepted', async () => {
+    const db = await setup(6);
+    const second: League = { ...league, id: 'L2', name: 'Second' };
+    await db.batch([{ type: 'put', collection: LEAGUE_COLLECTION, id: second.id, value: second }]);
+    for (let i = 0; i < 6; i += 1) {
+      await createFranchise(db, second, { city: 'Town', name: `Other${i}`, primaryColor: '#000000', secondaryColor: '#ffffff', initialGrade: 'B' }, nextId);
+    }
+    await generateLeagueRosters(db, second);
+    const [first, next] = [await rosterNames(db, league), await rosterNames(db, second)];
+    const [a, b] = await Promise.all([acceptLeague(db, league, () => 's-a'), acceptLeague(db, second, () => 's-b')]);
+    expect(a.ok && b.ok).toBe(true);
+    expect(await burned(db)).toEqual(new Set([...first, ...next]));
+  });
+
+  it('rejects an already-burned roster name and writes nothing', async () => {
+    const db = await setup(6);
+    const [taken] = await rosterNames(db, league);
+    await burnNames(db, [taken]);
+    const r = await acceptLeague(db, league);
+    expect(r).toEqual({ ok: false, error: { kind: 'burned-names', names: [taken] } });
+    expect(r.ok === false && acceptErrorText(r.error)).toContain(taken);
+    expect(await seasons(db)).toEqual([]);
+    expect(await burned(db)).toEqual(new Set([taken]));
+  });
+
+  it('rejects an unreadable registry and writes nothing', async () => {
+    const db = await setup(6);
+    await db.batch([{ type: 'put', collection: NAME_REGISTRY_COLLECTION, id: 'burned', value: { names: 'x' } }]);
+    const r = await acceptLeague(db, league);
+    expect(r.ok === false && r.error.kind).toBe('storage');
+    expect(await seasons(db)).toEqual([]);
+  });
+
+  it('burns nothing and creates no season when the batch fails', async () => {
+    const db = await setup(6);
+    const broken: Database = { ...db, batch: async () => ({ ok: false, error: new Error('disk') }) };
+    expect((await acceptLeague(broken, league)).ok).toBe(false);
+    expect(await seasons(db)).toEqual([]);
+    expect((await burned(db)).size).toBe(0);
+  });
+
+  it.each(['rename first', 'accept first'])('keeps renames and burning consistent when started together (%s)', async (order) => {
+    const db = await setup(6);
+    const r = await listRosters(db, league);
+    if (!r.ok) throw new Error('list');
+    const { franchiseId, players } = r.value.rosters[0];
+    const rename = () => renamePlayer(db, league, franchiseId, players[0].id, 'Zzyzx');
+    const accept = () => acceptLeague(db, league);
+    const results = order === 'rename first' ? await Promise.all([rename(), accept()]) : (await Promise.all([accept(), rename()])).reverse();
+    expect(results[1].ok).toBe(true);
+    expect(results[0].ok).toBe(order === 'rename first');
+    expect(await burned(db)).toEqual(new Set(await rosterNames(db, league)));
   });
 });
