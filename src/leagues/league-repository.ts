@@ -2,6 +2,7 @@ import { LEAGUE_COLLECTION, createLeagueId, isLeague, validateLeagueInput, type 
 import { leagueAbove, leagueBelow, linkedEditProblems } from './league-links';
 import type { Database, Op } from '@/storage/types';
 import { ROSTER_COLLECTION } from '@/rosters/roster';
+import { SEASON_COLLECTION, isSeason } from '@/seasons/season';
 import { FRANCHISE_COLLECTION } from '@/teams/franchise-repository';
 
 const COLLECTION = LEAGUE_COLLECTION;
@@ -123,6 +124,11 @@ export async function deleteLeague(db: Database, id: string): Promise<LeagueResu
         },
       };
     });
-  const removed = await db.batch([...teamOps, ...unlinkOps, { type: 'delete', collection: COLLECTION, id }]);
+  const seasons = await db.list<unknown>(SEASON_COLLECTION);
+  if (!seasons.ok) return storage(seasons.error);
+  const seasonOps = seasons.value
+    .filter((doc) => (isSeason(doc.value) ? doc.value.leagueId === id : (doc.value as { leagueId?: unknown } | null)?.leagueId === id))
+    .map((doc): Op => ({ type: 'delete', collection: SEASON_COLLECTION, id: doc.id }));
+  const removed = await db.batch([...teamOps, ...seasonOps, ...unlinkOps, { type: 'delete', collection: COLLECTION, id }]);
   return removed.ok ? done(undefined) : storage(removed.error);
 }

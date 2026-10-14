@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { Button } from '@/components/button';
+import { LeagueReview } from '@/components/rosters/league-review';
 import { RosterView, rosterErrorText } from '@/components/rosters/roster-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -9,6 +10,8 @@ import { Accent, Spacing } from '@/constants/theme';
 import type { League } from '@/leagues/league';
 import { generateLeagueRosters, rerollLeague } from '@/rosters/roster-repository';
 import { useRosters } from '@/rosters/use-rosters';
+import { LOCKED_TEXT } from '@/seasons/season';
+import type { LeagueSeasonState } from '@/seasons/use-league-season';
 import { useDatabase } from '@/storage/storage-provider';
 import { displayName, type Franchise } from '@/teams/franchise';
 import { deleteFranchise } from '@/teams/franchise-repository';
@@ -20,6 +23,9 @@ interface TeamsSectionProps {
   state: FranchisesState;
   refresh: () => Promise<void>;
   onRetry: () => void;
+  season: LeagueSeasonState;
+  refreshSeason: () => Promise<void>;
+  onRetrySeason: () => void;
   /** Called when a team form or roster opens or closes, so the screen can hide league info. */
   onFocusChange?: (viewing: boolean) => void;
 }
@@ -29,9 +35,10 @@ type TeamMode =
   | { kind: 'add' }
   | { kind: 'edit'; team: Franchise }
   | { kind: 'roster'; team: Franchise }
+  | { kind: 'review' }
   | { kind: 'confirm-delete'; team: Franchise };
 
-export function TeamsSection({ league, state, refresh, onRetry, onFocusChange }: TeamsSectionProps) {
+export function TeamsSection({ league, state, refresh, onRetry, season, refreshSeason, onRetrySeason, onFocusChange }: TeamsSectionProps) {
   const db = useDatabase();
   const [mode, setMode] = useState<TeamMode>({ kind: 'list' });
   const [deleting, setDeleting] = useState(false);
@@ -43,7 +50,7 @@ export function TeamsSection({ league, state, refresh, onRetry, onFocusChange }:
 
   const show = (next: TeamMode) => {
     setMode(next);
-    onFocusChange?.(next.kind === 'add' || next.kind === 'edit' || next.kind === 'roster');
+    onFocusChange?.(next.kind === 'add' || next.kind === 'edit' || next.kind === 'roster' || next.kind === 'review');
   };
   const list = () => show({ kind: 'list' });
   const saved = async () => {
@@ -57,7 +64,9 @@ export function TeamsSection({ league, state, refresh, onRetry, onFocusChange }:
     const result = await deleteFranchise(db, team.id);
     setDeleting(false);
     if (!result.ok) {
-      setDeleteError(result.error.kind === 'storage' ? result.error.error.message : 'Unexpected error.');
+      setDeleteError(
+        result.error.kind === 'storage' ? result.error.error.message : result.error.kind === 'locked' ? LOCKED_TEXT : 'Unexpected error.',
+      );
       return;
     }
     await refresh();
@@ -75,10 +84,28 @@ export function TeamsSection({ league, state, refresh, onRetry, onFocusChange }:
     setRosterBusy(false);
   };
 
+  const accepted = season.status === 'ready' && season.season !== null;
+  const seasonKnown = season.status === 'ready';
+
+  if (mode.kind === 'review' && state.status === 'ready' && rosters.state.status === 'ready' && !accepted) {
+    return (
+      <LeagueReview
+        league={league}
+        teams={state.teams}
+        rosters={rosters.state.rosters}
+        onAccepted={async () => {
+          await refreshSeason();
+          list();
+        }}
+        onBack={list}
+      />
+    );
+  }
+
   if (mode.kind === 'roster') {
     const roster = rosters.state.status === 'ready' ? rosters.state.rosters.find((r) => r.franchiseId === mode.team.id) : undefined;
     if (roster) {
-      return <RosterView league={league} team={mode.team} roster={roster} onChanged={rosters.refresh} onBack={list} />;
+      return <RosterView league={league} team={mode.team} roster={roster} locked={accepted} onChanged={rosters.refresh} onBack={list} />;
     }
   }
 
@@ -104,28 +131,52 @@ export function TeamsSection({ league, state, refresh, onRetry, onFocusChange }:
           {teams.length} of {league.size} teams
         </ThemedText>
       )}
-      <ThemedView style={styles.actions}>
-        <Button label="Add team" variant="primary" disabled={state.status !== 'ready' || full} onPress={() => show({ kind: 'add' })} />
-      </ThemedView>
-      {full && state.status === 'ready' && (
+      {accepted && (
+        <ThemedText themeColor="textSecondary">Accepted - Season 1. Teams and rosters are locked.</ThemedText>
+      )}
+      {season.status === 'error' && (
+        <ThemedView type="backgroundElement" style={styles.card}>
+          <ThemedText accessibilityRole="alert">Could not check whether this league is accepted. {season.message}</ThemedText>
+          <Button label="Retry" onPress={onRetrySeason} />
+        </ThemedView>
+      )}
+      {!accepted && (
+        <ThemedView style={styles.actions}>
+          <Button
+            label="Add team"
+            variant="primary"
+            disabled={state.status !== 'ready' || !seasonKnown || full}
+            onPress={() => show({ kind: 'add' })}
+          />
+        </ThemedView>
+      )}
+      {full && !accepted && state.status === 'ready' && (
         <ThemedText type="small" themeColor="textSecondary">
           This league is full.
         </ThemedText>
       )}
 
-      <ThemedView style={styles.actions}>
-        <Button
-          label="Generate rosters"
-          disabled={!rostersReady || rosterBusy || missingRosters === 0}
-          onPress={() => runRosters(generateLeagueRosters)}
-        />
-        <Button
-          label="Reroll all rosters"
-          disabled={!rostersReady || rosterBusy || rosterList.length === 0}
-          onPress={() => setConfirmingReroll(true)}
-        />
-      </ThemedView>
-      {confirmingReroll && (
+      {!accepted && (
+        <ThemedView style={styles.actions}>
+          <Button
+            label="Generate rosters"
+            disabled={!rostersReady || !seasonKnown || rosterBusy || missingRosters === 0}
+            onPress={() => runRosters(generateLeagueRosters)}
+          />
+          <Button
+            label="Reroll all rosters"
+            disabled={!rostersReady || !seasonKnown || rosterBusy || rosterList.length === 0}
+            onPress={() => setConfirmingReroll(true)}
+          />
+          <Button
+            label="Review and accept"
+            variant="primary"
+            disabled={!rostersReady || !seasonKnown || rosterBusy || teams.length === 0}
+            onPress={() => show({ kind: 'review' })}
+          />
+        </ThemedView>
+      )}
+      {confirmingReroll && !accepted && (
         <ThemedView type="backgroundElement" style={styles.card}>
           <ThemedText accessibilityRole="alert">
             Replace every roster in this league? Current values are discarded.
@@ -197,6 +248,8 @@ export function TeamsSection({ league, state, refresh, onRetry, onFocusChange }:
                         {hasRoster(team.id) && (
                           <Button label="Roster" accessibilityLabel={`Roster for ${label}`} onPress={() => show({ kind: 'roster', team })} />
                         )}
+                        {!accepted && (
+                          <>
                         <Button label="Edit" accessibilityLabel={`Edit ${label}`} onPress={() => show({ kind: 'edit', team })} />
                         <Button
                           label="Delete"
@@ -207,6 +260,8 @@ export function TeamsSection({ league, state, refresh, onRetry, onFocusChange }:
                             setMode({ kind: 'confirm-delete', team });
                           }}
                         />
+                          </>
+                        )}
                       </ThemedView>
                     )}
                   </ThemedView>

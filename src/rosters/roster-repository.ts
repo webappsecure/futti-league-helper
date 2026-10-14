@@ -3,6 +3,7 @@ import { NAME_POOL } from '@/names/name-pool';
 import { getBurnedNames } from '@/names/name-registry';
 import { pickRandomName } from '@/names/pick-name';
 import type { Rng } from '@/rules/dice';
+import { getLeagueSeason } from '@/seasons/season-repository';
 import type { Database, Op } from '@/storage/types';
 import type { Franchise } from '@/teams/franchise';
 import { listFranchises } from '@/teams/franchise-repository';
@@ -20,6 +21,7 @@ export type RosterError =
   | { kind: 'no-teams' }
   | { kind: 'not-found' }
   | { kind: 'no-names' }
+  | { kind: 'locked' }
   | { kind: 'storage'; error: Error };
 
 export type RosterResult<T> = { ok: true; value: T } | { ok: false; error: RosterError };
@@ -27,6 +29,13 @@ export type RosterResult<T> = { ok: true; value: T } | { ok: false; error: Roste
 const done = <T>(value: T): RosterResult<T> => ({ ok: true, value });
 const fail = (error: RosterError): RosterResult<never> => ({ ok: false, error });
 const storage = (error: Error): RosterResult<never> => fail({ kind: 'storage', error });
+
+/** `locked` once the league has a season; a failed lookup is a storage error, never "unlocked". */
+async function lockFailure(db: Database, league: League): Promise<RosterResult<never> | null> {
+  const season = await getLeagueSeason(db, league.id);
+  if (!season.ok) return storage(season.error);
+  return season.value === null ? null : fail({ kind: 'locked' });
+}
 
 interface Options {
   rng?: Rng;
@@ -103,6 +112,8 @@ export async function generateLeagueRosters(
   league: League,
   { rng = Math.random, pool = NAME_POOL }: Options = {},
 ): Promise<RosterResult<Roster[]>> {
+  const locked = await lockFailure(db, league);
+  if (locked) return locked;
   const teams = await listFranchises(db, league);
   if (!teams.ok) return teams.error.kind === 'storage' ? storage(teams.error.error) : fail({ kind: 'no-teams' });
   if (teams.value.teams.length === 0) return fail({ kind: 'no-teams' });
@@ -125,6 +136,8 @@ export async function rerollLeague(
   league: League,
   { rng = Math.random, pool = NAME_POOL }: Options = {},
 ): Promise<RosterResult<Roster[]>> {
+  const locked = await lockFailure(db, league);
+  if (locked) return locked;
   const teams = await listFranchises(db, league);
   if (!teams.ok) return teams.error.kind === 'storage' ? storage(teams.error.error) : fail({ kind: 'no-teams' });
   const have = await listRosters(db, league);
@@ -163,6 +176,8 @@ export async function rerollTeam(
   franchiseId: string,
   { rng = Math.random, pool = NAME_POOL }: Options = {},
 ): Promise<RosterResult<Roster>> {
+  const locked = await lockFailure(db, league);
+  if (locked) return locked;
   const loaded = await loadTeam(db, league, franchiseId);
   if (!loaded.ok) return loaded;
   const used = await unavailableNames(db, (r) => (r.franchiseId === franchiseId ? [] : r.players.map((p) => p.name)));
@@ -182,6 +197,8 @@ export async function rerollPlayer(
   playerId: string,
   { rng = Math.random, pool = NAME_POOL }: Options = {},
 ): Promise<RosterResult<Roster>> {
+  const locked = await lockFailure(db, league);
+  if (locked) return locked;
   const loaded = await loadTeam(db, league, franchiseId);
   if (!loaded.ok) return loaded;
   const { team, roster } = loaded.value;

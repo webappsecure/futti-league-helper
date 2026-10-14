@@ -8,6 +8,7 @@ import { Accent, Spacing } from '@/constants/theme';
 import type { League } from '@/leagues/league';
 import type { Roster, RosterPlayer } from '@/rosters/roster';
 import { rerollPlayer, rerollTeam, type RosterError, type RosterResult } from '@/rosters/roster-repository';
+import { LOCKED_TEXT } from '@/seasons/season';
 import { useDatabase } from '@/storage/storage-provider';
 import { displayName, type Franchise } from '@/teams/franchise';
 
@@ -15,6 +16,8 @@ interface RosterViewProps {
   league: League;
   team: Franchise;
   roster: Roster;
+  /** True once the league is accepted: rerolls are hidden. */
+  locked?: boolean;
   onChanged: () => Promise<void>;
   onBack: () => void;
 }
@@ -23,6 +26,8 @@ export function rosterErrorText(error: RosterError): string {
   switch (error.kind) {
     case 'no-names':
       return 'No unused last names are left.';
+    case 'locked':
+      return LOCKED_TEXT;
     case 'no-teams':
       return 'This league has no teams.';
     case 'not-found':
@@ -36,12 +41,32 @@ function stars(count: number): string {
   return count === 0 ? '-' : '★'.repeat(count);
 }
 
-function PlayerRow({ player, busy, onReroll }: { player: RosterPlayer; busy: boolean; onReroll: () => void }) {
-  const details =
-    player.kind === 'standard'
-      ? `Age ${player.age} · OF ${player.offense} · DE ${player.defense} · SP ${player.sportsmanship} · CO ${stars(player.controlStars)}`
-      : `Age ${player.age} · GO ${player.goaltending} · SP ${player.sportsmanship}`;
-  const label = player.kind === 'standard' ? player.name : `${player.name} (G)`;
+/** One-line player summary plus a screen-reader variant that spells out the control stars. */
+export function playerLine(player: RosterPlayer): { label: string; details: string; spoken?: string } {
+  if (player.kind === 'goalie') {
+    return {
+      label: `${player.name} (G)`,
+      details: `Age ${player.age} · GO ${player.goaltending} · SP ${player.sportsmanship}`,
+    };
+  }
+  const base = `Age ${player.age} · OF ${player.offense} · DE ${player.defense} · SP ${player.sportsmanship}`;
+  return {
+    label: player.name,
+    details: `${base} · CO ${stars(player.controlStars)}`,
+    spoken: `${base} · ${player.controlStars} control stars`,
+  };
+}
+
+function PlayerRow({
+  player,
+  busy,
+  onReroll,
+}: {
+  player: RosterPlayer;
+  busy: boolean;
+  onReroll: (() => void) | null;
+}) {
+  const { label, details, spoken } = playerLine(player);
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
       <ThemedView style={styles.row}>
@@ -50,19 +75,19 @@ function PlayerRow({ player, busy, onReroll }: { player: RosterPlayer; busy: boo
           <ThemedText
             type="small"
             themeColor="textSecondary"
-            accessibilityLabel={
-              player.kind === 'standard' ? details.replace(/CO .*$/, `${player.controlStars} control stars`) : undefined
-            }>
+            accessibilityLabel={spoken}>
             {details}
           </ThemedText>
         </ThemedView>
-        <Button label="Reroll" accessibilityLabel={`Reroll ${player.name}`} disabled={busy} onPress={onReroll} />
+        {onReroll !== null && (
+          <Button label="Reroll" accessibilityLabel={`Reroll ${player.name}`} disabled={busy} onPress={onReroll} />
+        )}
       </ThemedView>
     </ThemedView>
   );
 }
 
-export function RosterView({ league, team, roster, onChanged, onBack }: RosterViewProps) {
+export function RosterView({ league, team, roster, locked = false, onChanged, onBack }: RosterViewProps) {
   const db = useDatabase();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +119,9 @@ export function RosterView({ league, team, roster, onChanged, onBack }: RosterVi
       <ThemedText themeColor="textSecondary">Grade {team.initialGrade}</ThemedText>
       <ThemedView style={styles.row}>
         <Button label="Back to teams" onPress={onBack} />
-        <Button label="Reroll team" disabled={busy} onPress={() => run(() => rerollTeam(db, league, team.id))} />
+        {!locked && (
+          <Button label="Reroll team" disabled={busy} onPress={() => run(() => rerollTeam(db, league, team.id))} />
+        )}
       </ThemedView>
       {error !== null && (
         <ThemedText accessibilityRole="alert" style={styles.error}>
@@ -106,7 +133,7 @@ export function RosterView({ league, team, roster, onChanged, onBack }: RosterVi
           key={player.id}
           player={player}
           busy={busy}
-          onReroll={() => run(() => rerollPlayer(db, league, team.id, player.id))}
+          onReroll={locked ? null : () => run(() => rerollPlayer(db, league, team.id, player.id))}
         />
       ))}
     </ThemedView>

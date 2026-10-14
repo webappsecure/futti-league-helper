@@ -8,6 +8,7 @@ import { Accent, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { League } from '@/leagues/league';
 import { GRADES } from '@/rules/charts';
+import { LOCKED_TEXT } from '@/seasons/season';
 import { useDatabase } from '@/storage/storage-provider';
 import {
   TEAM_TEXT_MAX_LENGTH,
@@ -80,6 +81,8 @@ export function TeamForm({ league, initial, onSaved, onCancel }: TeamFormProps) 
       setErrors(result.error.fields);
     } else if (result.error.kind === 'full') {
       setSaveError(`This league already has ${league.size} teams.`);
+    } else if (result.error.kind === 'locked') {
+      setSaveError(LOCKED_TEXT);
     } else if (result.error.kind === 'not-found') {
       setSaveError('This team no longer exists.');
     } else {

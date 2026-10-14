@@ -9,6 +9,7 @@ import type { League } from '@/leagues/league';
 import { LinkedLeagues } from '@/components/leagues/linked-leagues';
 import { leagueAbove, leagueBelow } from '@/leagues/league-links';
 import { TeamsSection } from '@/components/teams/team-list';
+import { useLeagueSeason } from '@/seasons/use-league-season';
 import { useFranchises } from '@/teams/use-franchises';
 
 interface LeagueDetailProps {
@@ -42,6 +43,8 @@ export function LeagueDetail({
   onConfirmDelete,
 }: LeagueDetailProps) {
   const { state, refresh, retry } = useFranchises(league);
+  const season = useLeagueSeason(league);
+  const accepted = season.state.status === 'ready' && season.state.season !== null;
   const [teamFocused, setTeamFocused] = useState(false);
   const isLinked = leagueAbove(league, leagues) !== null || leagueBelow(league, leagues) !== null;
   const hasTeams = state.status === 'ready' && state.teams.length > 0;
@@ -75,6 +78,9 @@ export function LeagueDetail({
         state={state}
         refresh={refresh}
         onRetry={retry}
+        season={season.state}
+        refreshSeason={season.refresh}
+        onRetrySeason={season.retry}
         onFocusChange={setTeamFocused}
       />
 
@@ -82,7 +88,7 @@ export function LeagueDetail({
         (confirmingDelete ? (
           <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText accessibilityRole="alert">
-              Delete {league.name}?{hasTeams ? ' Its teams are deleted too.' : ''}{isLinked ? ' It is unlinked from its neighboring leagues.' : ''} This cannot be undone.
+              Delete {league.name}?{hasTeams ? ' Its teams are deleted too.' : ''}{accepted ? ' Its accepted season is deleted too.' : ''}{isLinked ? ' It is unlinked from its neighboring leagues.' : ''} This cannot be undone.
             </ThemedText>
             {deleteError !== null && (
               <ThemedText accessibilityRole="alert" style={styles.error}>

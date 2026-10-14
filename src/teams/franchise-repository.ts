@@ -2,6 +2,7 @@ import { createId } from '@/leagues/ids';
 import { LEAGUE_COLLECTION, isLeague, type League } from '@/leagues/league';
 import { chainLeagueIds } from '@/leagues/league-links';
 import { ROSTER_COLLECTION } from '@/rosters/roster';
+import { getLeagueSeason } from '@/seasons/season-repository';
 import type { Database } from '@/storage/types';
 import {
   displayName,
@@ -18,6 +19,7 @@ export const FRANCHISE_COLLECTION = 'franchises';
 export type FranchiseError =
   | { kind: 'validation'; fields: FranchiseFieldErrors }
   | { kind: 'full' }
+  | { kind: 'locked' }
   | { kind: 'not-found' }
   | { kind: 'storage'; error: Error };
 
@@ -25,6 +27,13 @@ export type FranchiseResult<T> = { ok: true; value: T } | { ok: false; error: Fr
 
 const done = <T>(value: T): FranchiseResult<T> => ({ ok: true, value });
 const storage = (error: Error): FranchiseResult<never> => ({ ok: false, error: { kind: 'storage', error } });
+/** `locked` once the league has an accepted season; a failed lookup is a storage error, never "unlocked". */
+async function lockFailure(db: Database, leagueId: string): Promise<FranchiseResult<never> | null> {
+  const season = await getLeagueSeason(db, leagueId);
+  if (!season.ok) return storage(season.error);
+  return season.value === null ? null : { ok: false, error: { kind: 'locked' } };
+}
+
 const DUPLICATE = 'A team with this name already exists in this league.';
 const DUPLICATE_LINKED = 'A team with this name already exists in this league or a linked league.';
 
@@ -87,6 +96,8 @@ export async function createFranchise(
   input: FranchiseInput,
   newId: () => string = createId,
 ): Promise<FranchiseResult<Franchise>> {
+  const locked = await lockFailure(db, league.id);
+  if (locked) return locked;
   const checked = validateFranchiseInput(input);
   if (!checked.ok) return { ok: false, error: { kind: 'validation', fields: checked.fields } };
   const listed = await listFranchises(db, league);
@@ -113,6 +124,8 @@ export async function updateFranchise(
   id: string,
   input: FranchiseInput,
 ): Promise<FranchiseResult<Franchise>> {
+  const locked = await lockFailure(db, league.id);
+  if (locked) return locked;
   const checked = validateFranchiseInput(input);
   if (!checked.ok) return { ok: false, error: { kind: 'validation', fields: checked.fields } };
   const listed = await listFranchises(db, league);
@@ -134,6 +147,13 @@ export async function updateFranchise(
 }
 
 export async function deleteFranchise(db: Database, id: string): Promise<FranchiseResult<void>> {
+  const stored = await db.get<unknown>(FRANCHISE_COLLECTION, id);
+  if (!stored.ok) return storage(stored.error);
+  const leagueId = (stored.value as { leagueId?: unknown } | null)?.leagueId;
+  if (typeof leagueId === 'string') {
+    const locked = await lockFailure(db, leagueId);
+    if (locked) return locked;
+  }
   const removed = await db.batch([
     { type: 'delete', collection: ROSTER_COLLECTION, id },
     { type: 'delete', collection: FRANCHISE_COLLECTION, id },
