@@ -17,6 +17,8 @@ export interface TeamControls {
   /** Team and roster actions are shown at all; false once accepted. */
   showActions: boolean;
   addEnabled: boolean;
+  /** Per-team Edit and Delete; they wait for the season lookup like the other actions. */
+  editDeleteEnabled: boolean;
   full: boolean;
   generateEnabled: boolean;
   rerollAllEnabled: boolean;
@@ -30,6 +32,7 @@ export function teamControls(i: TeamControlInputs): TeamControls {
   return {
     showActions: !i.accepted,
     addEnabled: i.teamsReady && i.seasonKnown && !full,
+    editDeleteEnabled: i.seasonKnown && !i.accepted,
     full,
     generateEnabled: ready && i.missingRosters > 0,
     rerollAllEnabled: ready && i.rosterCount > 0,

@@ -261,11 +261,17 @@ export function TeamsSection({ league, state, refresh, onRetry, season, refreshS
                         )}
                         {controls.showActions && (
                           <>
-                            <Button label="Edit" accessibilityLabel={`Edit ${label}`} onPress={() => show({ kind: 'edit', team })} />
+                            <Button
+                              label="Edit"
+                              accessibilityLabel={`Edit ${label}`}
+                              disabled={!controls.editDeleteEnabled}
+                              onPress={() => show({ kind: 'edit', team })}
+                            />
                             <Button
                               label="Delete"
                               accessibilityLabel={`Delete ${label}`}
                               variant="danger"
+                              disabled={!controls.editDeleteEnabled}
                               onPress={() => {
                                 setDeleteError(null);
                                 setMode({ kind: 'confirm-delete', team });

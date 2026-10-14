@@ -17,6 +17,7 @@ describe('teamControls', () => {
     expect(teamControls(base)).toEqual({
       showActions: true,
       addEnabled: true,
+      editDeleteEnabled: true,
       full: false,
       generateEnabled: false,
       rerollAllEnabled: true,
@@ -54,5 +55,11 @@ describe('teamControls', () => {
 
   it('hides actions once accepted', () => {
     expect(teamControls({ ...base, accepted: true }).showActions).toBe(false);
+  });
+
+  it('disables edit and delete until the season is known, and once accepted', () => {
+    expect(teamControls({ ...base, seasonKnown: false }).editDeleteEnabled).toBe(false);
+    const accepted = teamControls({ ...base, accepted: true });
+    expect([accepted.editDeleteEnabled, accepted.showActions]).toEqual([false, false]);
   });
 });
