@@ -47,6 +47,3 @@ example
 .claude/
 blueprint/
 CLAUDE.md
-
-# Commercial font; keep a local copy only (see src/cards/card-images.ts)
-assets/fonts/RockwellNovaCond-Bold.ttf

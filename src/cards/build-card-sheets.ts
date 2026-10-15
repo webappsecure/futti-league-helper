@@ -26,7 +26,7 @@ export interface CardSheetsInput {
   images: Record<BackgroundImage, string>;
   /** A `data:font/ttf;base64,...` URI for the Open Sans variable font. */
   font: string;
-  /** A `data:font/ttf;base64,...` URI for Rockwell Nova Condensed Bold. */
+  /** A `data:font/ttf;base64,...` URI for Bevan. */
   pillFont: string;
 }
 
@@ -47,12 +47,11 @@ export function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;');
 }
 
-/** Pill text in capitals, compressed horizontally when it would not fit at the pill font size. */
+/** Pill text in capitals, compressed horizontally to 75% or narrower when it would not fit. */
 function pillText(value: string): string {
   const upper = value.toUpperCase();
   const scale = pillTextScale(upper);
-  const style = scale < 1 ? ` style="transform:scaleX(${scale})"` : '';
-  return `<span${style}>${escapeHtml(upper)}</span>`;
+  return `<span style="transform:scaleX(${scale})">${escapeHtml(upper)}</span>`;
 }
 
 /** The artwork fills the space between the pills, reaching a little under them; the pills are drawn over it. */
@@ -76,6 +75,8 @@ const SP_LABEL_PT = 10;
 const OFFENCE_ROW_DROP_IN = 0.05;
 const LABEL_GRAY = '#4d4d4d';
 const FONT_FAMILY = 'Futti Card';
+/** Bevan's capitals sit about 0.6pt above the centre of a 16pt line box (cap height 1592 and ascent 2366 of 2048 units), so the text drops by that much to look centred in the pill. */
+const PILL_TEXT_DROP_PT = 0.6;
 const PILL_FONT_FAMILY = 'Futti Pill';
 
 const STYLE = `
@@ -89,8 +90,8 @@ body { font-family: "${FONT_FAMILY}", "Arial Narrow", Arial, sans-serif; font-we
 .card { position: relative; width: ${CARD_WIDTH_IN}in; height: ${CARD_HEIGHT_IN}in; flex: none; border: 1px solid #bbb; overflow: hidden; }
 .bg { position: absolute; top: ${PILL_EDGE_IN}in; left: ${PILL_INSET_IN}in; right: ${PILL_INSET_IN}in; bottom: ${PILL_EDGE_IN}in; opacity: ${BACKGROUND_OPACITY}; background-size: cover; background-position: center; background-repeat: no-repeat; }
 .bg.mirrored { transform: scaleX(-1); }
-.pill { position: absolute; left: 0.06in; right: 0.06in; height: 0.24in; border-radius: 0.12in; display: flex; align-items: center; justify-content: center; font-family: "${PILL_FONT_FAMILY}", Georgia, serif; font-weight: 700; font-stretch: 100%; font-size: ${PILL_FONT_PT}pt; white-space: nowrap; overflow: hidden; }
-.pill > span { flex: none; line-height: 1; }
+.pill { position: absolute; left: 0.06in; right: 0.06in; height: 0.24in; border-radius: 0.12in; display: flex; align-items: center; justify-content: center; font-family: "${PILL_FONT_FAMILY}", Georgia, serif; font-weight: 400; font-stretch: normal; font-size: ${PILL_FONT_PT}pt; white-space: nowrap; overflow: hidden; }
+.pill > span { flex: none; line-height: 1; position: relative; top: ${PILL_TEXT_DROP_PT}pt; }
 .top { top: 0.06in; }
 .bottom { bottom: 0.06in; }
 .body { position: absolute; top: 0.34in; bottom: 0.34in; left: 0.06in; right: 0.06in; display: flex; flex-direction: column; justify-content: center; }
@@ -182,7 +183,7 @@ export function buildCardSheets(input: CardSheetsInput): CardSheetsResult {
     .map((key) => `.bg-${key} { background-image: url("${images[key]}"); }`)
     .join('\n');
 
-  const pillFace = `@font-face { font-family: "${PILL_FONT_FAMILY}"; src: url("${pillFont}") format("truetype"); font-weight: 700; }\n`;
+  const pillFace = `@font-face { font-family: "${PILL_FONT_FAMILY}"; src: url("${pillFont}") format("truetype"); font-weight: 400; }\n`;
   const fontFace = `@font-face { font-family: "${FONT_FAMILY}"; src: url("${font}") format("truetype"); font-weight: 300 800; font-stretch: 75% 100%; }\nbody, .card { font-stretch: 75%; }\n`;
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(league.name)} cards</title><style>${pillFace}${fontFace}${STYLE}${backgrounds}</style></head><body>${sheets.join('')}</body></html>`;
   return { ok: true, html, pages: sheets.length };

@@ -11,8 +11,8 @@ export const CARD_IMAGE_SOURCES: Record<BackgroundImage, { module: number; mime:
 /** Open Sans variable font (width and weight axes), used for Open Sans Condensed ExtraBold. */
 export const CARD_FONT_SOURCE = { module: require('@/assets/fonts/OpenSans-Variable.ttf') as number, mime: 'font/ttf' };
 
-/** Rockwell Nova Condensed Bold, used for the name and team pills. */
-export const PILL_FONT_SOURCE = { module: require('@/assets/fonts/RockwellNovaCond-Bold.ttf') as number, mime: 'font/ttf' };
+/** Bevan, used for the name and team pills. */
+export const PILL_FONT_SOURCE = { module: require('@/assets/fonts/Bevan-Regular.ttf') as number, mime: 'font/ttf' };
 
 export interface CardAssets {
   images: Record<BackgroundImage, string>;

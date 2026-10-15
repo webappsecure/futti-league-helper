@@ -127,17 +127,17 @@ describe('buildCardSheets', () => {
     expect(count(html, '<div class="sp-value" ')).toBe(2);
   });
 
-  it('sets pills in 16pt Rockwell Nova Condensed Bold and compresses long text to fit', () => {
+  it('sets pills in 16pt Bevan at 75% width, narrower for long text', () => {
     const r = roster('a');
     r.players[0] = { ...r.players[0], name: 'Maldonado-Rodriguez de la Cruz' };
     const f = team('a', { name: 'Rio' });
     const { html } = built(input(['a'], { rosters: [r], franchises: [f] }));
     expect(html).toContain('@font-face { font-family: "Futti Pill"; src: url("' + FONT + '")');
-    expect(html).toMatch(/\.pill \{[^}]*"Futti Pill"[^}]*font-weight: 700;[^}]*font-size: 16pt;/);
-    expect(html).toMatch(/<span style="transform:scaleX\(0\.\d+\)">MALDONADO-RODRIGUEZ DE LA CRUZ<\/span>/);
-    expect(count(html, 'transform:scaleX(')).toBe(1);
-    expect(html).toContain('<span>STD1</span>');
-    expect(html).toContain('<span>RIO</span>');
+    expect(html).toMatch(/\.pill \{[^}]*"Futti Pill"[^}]*font-weight: 400;[^}]*font-size: 16pt;/);
+    expect(html).toMatch(/<span style="transform:scaleX\(0\.[0-6]\d*\)">MALDONADO-RODRIGUEZ DE LA CRUZ<\/span>/);
+    expect(html).toMatch(/\.pill > span \{[^}]*top: 0\.6pt;/);
+    expect(html).toContain('<span style="transform:scaleX(0.75)">STD1</span>');
+    expect(html).toContain('<span style="transform:scaleX(0.75)">RIO</span>');
   });
 
   it('shows ratings, labels and stars on standard cards', () => {
