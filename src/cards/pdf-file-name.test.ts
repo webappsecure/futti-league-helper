@@ -17,4 +17,10 @@ describe('pdfFileName', () => {
   it('caps long names', () => {
     expect(pdfFileName('x'.repeat(200), 1)).toBe(`${'x'.repeat(80)} season 1 cards.pdf`);
   });
+
+  it('does not split an emoji at the cap', () => {
+    const name = pdfFileName('x'.repeat(79) + '😀' + 'y'.repeat(10), 1);
+    expect(name).toBe(`${'x'.repeat(79)}😀 season 1 cards.pdf`);
+    expect(name.isWellFormed()).toBe(true);
+  });
 });
