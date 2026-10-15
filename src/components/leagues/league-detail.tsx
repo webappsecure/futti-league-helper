@@ -9,6 +9,7 @@ import type { League } from '@/leagues/league';
 import { LinkedLeagues } from '@/components/leagues/linked-leagues';
 import { leagueAbove, leagueBelow } from '@/leagues/league-links';
 import { TeamsSection } from '@/components/teams/team-list';
+import { usePrintCards } from '@/cards/use-print-cards';
 import { useLeagueSeason } from '@/seasons/use-league-season';
 import { useFranchises } from '@/teams/use-franchises';
 
@@ -45,6 +46,7 @@ export function LeagueDetail({
   const { state, refresh, retry } = useFranchises(league);
   const season = useLeagueSeason(league);
   const accepted = season.state.status === 'ready' && season.state.season !== null;
+  const printCards = usePrintCards(league, season.state.status === 'ready' ? season.state.season : null);
   const [teamFocused, setTeamFocused] = useState(false);
   const isLinked = leagueAbove(league, leagues) !== null || leagueBelow(league, leagues) !== null;
   const hasTeams = state.status === 'ready' && state.teams.length > 0;
@@ -70,6 +72,27 @@ export function LeagueDetail({
         </ThemedView>
 
         <LinkedLeagues league={league} leagues={leagues} onChanged={onLinksChanged} />
+
+        {accepted && (
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="smallBold">Game cards</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Prints the cards for every team for the current season on US Letter landscape sheets, four teams per sheet.
+            </ThemedText>
+            {printCards.error !== null && (
+              <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
+                Could not print cards. {printCards.error}
+              </ThemedText>
+            )}
+            <ThemedView style={styles.actions}>
+              <Button
+                label={printCards.printing ? 'Preparing...' : 'Print cards'}
+                disabled={printCards.printing}
+                onPress={printCards.print}
+              />
+            </ThemedView>
+          </ThemedView>
+        )}
         </>
       )}
 
