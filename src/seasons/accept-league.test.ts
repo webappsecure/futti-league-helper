@@ -1,7 +1,7 @@
 import { LEAGUE_COLLECTION, type League } from '@/leagues/league';
 import { burnNames, getBurnedNames, NAME_REGISTRY_COLLECTION } from '@/names/name-registry';
 import { ROSTER_COLLECTION } from '@/rosters/roster';
-import { deleteLeague } from '@/leagues/league-repository';
+import { deleteLeague, getLeague } from '@/leagues/league-repository';
 import {
   generateLeagueRosters,
   listRosters,
@@ -258,5 +258,112 @@ describe('acceptLeague burning', () => {
     expect(results[1].ok).toBe(true);
     expect(results[0].ok).toBe(order === 'rename first');
     expect(await burned(db)).toEqual(new Set(await rosterNames(db, league)));
+  });
+
+  describe('team and league writes started together with accept', () => {
+    const order = ['write first', 'accept first'] as const;
+    const run = async <T>(db: Database, write: () => Promise<T>, o: (typeof order)[number]) => {
+      const accept = () => acceptLeague(db, league);
+      return o === 'write first'
+        ? Promise.all([write(), accept()])
+        : ((await Promise.all([accept(), write()])).reverse() as [T, Awaited<ReturnType<typeof accept>>]);
+    };
+    const teamIds = async (db: Database) => {
+      const r = await listFranchises(db, league);
+      if (!r.ok) throw new Error('teams');
+      return r.value.teams.map((t) => t.id);
+    };
+
+    it.each(order)('deleteFranchise either lands before the accept (which then fails) or fails locked (%s)', async (o) => {
+      const db = await setup(6);
+      const [victim] = await teamIds(db);
+      const [d, a] = await run(db, () => deleteFranchise(db, victim), o);
+      if (o === 'write first') {
+        expect(d.ok).toBe(true);
+        expect(a.ok === false && a.error.kind).toBe('incomplete');
+        expect(await seasons(db)).toEqual([]);
+      } else {
+        expect(a.ok).toBe(true);
+        expect(d).toEqual({ ok: false, error: { kind: 'locked' } });
+        expect(await teamIds(db)).toHaveLength(6);
+      }
+    });
+
+    it.each(order)('updateFranchise either lands before the accept or fails locked (%s)', async (o) => {
+      const db = await setup(6);
+      const [first] = await teamIds(db);
+      const edit = () =>
+        updateFranchise(db, league, first, { city: 'City', name: 'Renamed', primaryColor: '#111111', secondaryColor: '#ffffff', initialGrade: 'B' });
+      const [u, a] = await run(db, edit, o);
+      expect(a.ok).toBe(true);
+      expect(u.ok).toBe(o === 'write first');
+      if (o === 'accept first') expect(u).toEqual({ ok: false, error: { kind: 'locked' } });
+    });
+
+    it('createFranchise started behind an accept sees the lock', async () => {
+      const db = await setup(6);
+      const [a, c] = await Promise.all([
+        acceptLeague(db, league),
+        createFranchise(db, league, { city: 'C', name: 'Late', primaryColor: '#000000', secondaryColor: '#ffffff', initialGrade: 'B' }),
+      ]);
+      expect(a.ok).toBe(true);
+      expect(c).toEqual({ ok: false, error: { kind: 'locked' } });
+    });
+
+    it.each(order)('deleteLeague never leaves a season for a missing league (%s)', async (o) => {
+      const real = await setup(6);
+      // Accept pauses after reading the rosters, so an unserialized delete would finish in that gap.
+      const db: Database = {
+        ...real,
+        list: async (collection) => {
+          const result = await real.list(collection);
+          if (collection === ROSTER_COLLECTION) await new Promise((resolve) => setTimeout(resolve, 5));
+          return result as never;
+        },
+      };
+      const [d] = await run(db, () => deleteLeague(db, league.id), o);
+      expect(d.ok).toBe(true);
+      const stored = await getLeague(db, league.id);
+      expect(stored.ok && stored.value).toBe(null);
+      expect(await seasons(db)).toEqual([]);
+    });
+  });
+
+  describe('roster writes started together with accept', () => {
+    type Write = (db: Database, franchiseId: string, playerId: string) => Promise<{ ok: boolean; error?: unknown }>;
+    const writes: [string, Write][] = [
+      ['rerollLeague', (db) => rerollLeague(db, league)],
+      ['rerollTeam', (db, team) => rerollTeam(db, league, team)],
+      ['rerollPlayer', (db, team, player) => rerollPlayer(db, league, team, player)],
+    ];
+
+    it.each(writes.flatMap(([name, write]) => [[name, write, 'write first'] as const, [name, write, 'accept first'] as const]))(
+      '%s either lands before the accept or fails locked (%s)',
+      async (_name, write, order) => {
+        const db = await setup(6);
+        const r = await listRosters(db, league);
+        if (!r.ok) throw new Error('list');
+        const { franchiseId, players } = r.value.rosters[0];
+        const doWrite = () => write(db, franchiseId, players[0].id);
+        const accept = () => acceptLeague(db, league);
+        const [w, a] =
+          order === 'write first'
+            ? await Promise.all([doWrite(), accept()])
+            : (await Promise.all([accept(), doWrite()])).reverse();
+        expect(a.ok).toBe(true);
+        expect(w.ok).toBe(order === 'write first');
+        expect(await burned(db)).toEqual(new Set(await rosterNames(db, league)));
+      },
+    );
+
+    it('generateLeagueRosters for missing teams never writes after the season exists', async () => {
+      const db = await setup(6, false);
+      const [a, g] = await Promise.all([acceptLeague(db, league), generateLeagueRosters(db, league)]);
+      expect(g.ok).toBe(true);
+      expect(a.ok === false && a.error.kind).toBe('missing-rosters');
+      expect(await seasons(db)).toEqual([]);
+      expect(await acceptLeague(db, league)).toMatchObject({ ok: true });
+      expect(await generateLeagueRosters(db, league)).toEqual({ ok: false, error: { kind: 'locked' } });
+    });
   });
 });

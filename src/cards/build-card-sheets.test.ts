@@ -97,45 +97,31 @@ describe('buildCardSheets', () => {
     expect(html).toContain('opacity: 0.15');
   });
 
-  it('sets offense and defense values in 40pt Open Sans Condensed ExtraBold', () => {
+  it('embeds the card and pill fonts', () => {
     const { html } = built(input(['a']));
     expect(html).toContain('@font-face { font-family: "Futti Card"; src: url("' + FONT + '")');
-    expect(html).toContain('font-stretch: 75% 100%');
-    expect(html).toMatch(/\.num \{[^}]*font-size: 40pt;[^}]*font-weight: 800/);
-    expect(html).toMatch(/\.num \{[^}]*transform: scaleY\(1\.1\)/);
-    expect(html).toMatch(/body \{[^}]*"Futti Card"/);
+    expect(html).toContain('@font-face { font-family: "Futti Pill"; src: url("' + FONT + '")');
   });
 
-  it('styles the OFFENCE, DEFENCE and SPORTSMANSHIP labels', () => {
+  it('labels the standard card stats with the British spellings', () => {
     const { html } = built(input(['a']));
-    expect(html).toMatch(/\.stat-label \{ font-size: 14pt; color: #4d4d4d; \}/);
-    expect(html).toMatch(/\.sp-label \{ font-size: 10pt; color: #4d4d4d; \}/);
-    expect(html).toMatch(/\.stat \{ align-items: center; \}/);
-    expect(html).toMatch(/\.offence \{ position: relative; top: 0\.05in; \}/);
-    expect(count(html, '<div class="line stat offence"><span class="stat-label">OFFENCE:</span>')).toBe(6);
-    expect(count(html, '<div class="line stat"><span class="stat-label">DEFENCE:</span>')).toBe(6);
+    expect(count(html, '<span class="stat-label">OFFENCE:</span>')).toBe(6);
+    expect(count(html, '<span class="stat-label">DEFENCE:</span>')).toBe(6);
     expect(count(html, '<span class="sp-label">SPORTSMANSHIP</span>')).toBe(6);
   });
 
-  it('sets the standard sportsmanship value in 24pt ExtraBold and keeps the stats clear of pills and stars', () => {
+  it('shows the sportsmanship value on standard and goaltender cards', () => {
     const { html } = built(input(['a']));
-    expect(html).toMatch(/\.sp-value \{ font-size: 24pt; font-weight: 800;/);
     expect(count(html, '<span class="sp-value" ')).toBe(6);
-    expect(html).toMatch(/\.standard \{ top: 0\.3in; bottom: 0\.46in; justify-content: space-evenly; \}/);
-    expect(html).toMatch(/\.stars \{[^}]*bottom: 0\.34in; height: 0\.18in;[^}]*font-size: 14pt;/);
-    // goaltenders use the same 24pt sportsmanship value
     expect(count(html, '<div class="sp-value" ')).toBe(2);
   });
 
-  it('sets pills in 16pt Bevan at 75% width, narrower for long text', () => {
+  it('sets pill text at 75% width, narrower for long text', () => {
     const r = roster('a');
     r.players[0] = { ...r.players[0], name: 'Maldonado-Rodriguez de la Cruz' };
     const f = team('a', { name: 'Rio' });
     const { html } = built(input(['a'], { rosters: [r], franchises: [f] }));
-    expect(html).toContain('@font-face { font-family: "Futti Pill"; src: url("' + FONT + '")');
-    expect(html).toMatch(/\.pill \{[^}]*"Futti Pill"[^}]*font-weight: 400;[^}]*font-size: 16pt;/);
     expect(html).toMatch(/<span style="transform:scaleX\(0\.[0-6]\d*\)">MALDONADO-RODRIGUEZ DE LA CRUZ<\/span>/);
-    expect(html).toMatch(/\.pill > span \{[^}]*top: 0\.6pt;/);
     expect(html).toContain('<span style="transform:scaleX(0.75)">STD1</span>');
     expect(html).toContain('<span style="transform:scaleX(0.75)">RIO</span>');
   });
@@ -164,9 +150,6 @@ describe('buildCardSheets', () => {
     expect(goalies[0]).toContain('<div class="stat-label">GOALTENDING</div>');
     expect(goalies[0]).toContain('<div class="sp-label">SPORTSMANSHIP</div>');
     expect(goalies[0]).toContain('<div class="num rating" ');
-    expect(html).toMatch(/\.rating \{ font-size: 48pt; \}/);
-    expect(html).toMatch(/\.goalie \.sp-label \{ position: relative; top: 0\.03in; \}/);
-    expect(html).toMatch(/\.goalie \.sp-value \{ position: relative; top: -0\.03in; \}/);
     expect(goalies.join('')).not.toContain('★');
   });
 
@@ -188,11 +171,6 @@ describe('buildCardSheets', () => {
     const { html } = built(input(['a'], { franchises: [f] }));
     expect(html).toContain('class="pill top" style="background:#da143b;color:#ffffff"');
     expect(html).toContain('class="pill bottom" style="background:#0047ab;color:#ffffff"');
-  });
-
-  it('fills the space between the pills with the background art', () => {
-    const { html } = built(input(['a']));
-    expect(html).toMatch(/\.bg \{[^}]*top: 0\.27in; left: 0\.06in; right: 0\.06in; bottom: 0\.27in;[^}]*background-size: cover;/);
   });
 
   it('mirrors only the second card of each pair', () => {

@@ -111,7 +111,7 @@ async function write(db: Database, rosters: Roster[]): Promise<RosterResult<Rost
 }
 
 /** Generates rosters for the league's teams that have none; existing rosters are untouched. */
-export async function generateLeagueRosters(
+async function generateNow(
   db: Database,
   league: League,
   { rng = Math.random, pool = NAME_POOL }: Options = {},
@@ -135,7 +135,7 @@ export async function generateLeagueRosters(
 }
 
 /** Rerolls every roster in the league, replacing each team's players. */
-export async function rerollLeague(
+async function rerollLeagueNow(
   db: Database,
   league: League,
   { rng = Math.random, pool = NAME_POOL }: Options = {},
@@ -174,7 +174,7 @@ async function loadTeam(
 }
 
 /** Rerolls one team's whole roster. */
-export async function rerollTeam(
+async function rerollTeamNow(
   db: Database,
   league: League,
   franchiseId: string,
@@ -194,7 +194,7 @@ export async function rerollTeam(
 }
 
 /** Rerolls one player in place. */
-export async function rerollPlayer(
+async function rerollPlayerNow(
   db: Database,
   league: League,
   franchiseId: string,
@@ -218,6 +218,17 @@ export async function rerollPlayer(
   const written = await write(db, [made.value as Roster]);
   return written.ok ? done(made.value as Roster) : written;
 }
+
+// Roster writes run one at a time with accept and rename, so a write can never land after the lock check
+// went stale and the names were burned.
+export const generateLeagueRosters = (...args: Parameters<typeof generateNow>) =>
+  acceptQueue(() => generateNow(...args));
+export const rerollLeague = (...args: Parameters<typeof rerollLeagueNow>) =>
+  acceptQueue(() => rerollLeagueNow(...args));
+export const rerollTeam = (...args: Parameters<typeof rerollTeamNow>) =>
+  acceptQueue(() => rerollTeamNow(...args));
+export const rerollPlayer = (...args: Parameters<typeof rerollPlayerNow>) =>
+  acceptQueue(() => rerollPlayerNow(...args));
 
 /** Gives one player a typed last name; invalid, burned and already-used names are rejected and nothing is written. */
 export function renamePlayer(

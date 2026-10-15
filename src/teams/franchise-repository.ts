@@ -3,6 +3,7 @@ import { LEAGUE_COLLECTION, isLeague, type League } from '@/leagues/league';
 import { chainLeagueIds } from '@/leagues/league-links';
 import { ROSTER_COLLECTION } from '@/rosters/roster';
 import { getLeagueSeason } from '@/seasons/season-repository';
+import { acceptQueue } from '@/seasons/accept-queue';
 import type { Database } from '@/storage/types';
 import {
   displayName,
@@ -90,7 +91,7 @@ export async function listFranchises(
   return done({ teams, unreadable });
 }
 
-export async function createFranchise(
+async function createFranchiseNow(
   db: Database,
   league: League,
   input: FranchiseInput,
@@ -118,7 +119,7 @@ export async function createFranchise(
   return written.ok ? done(franchise) : storage(written.error);
 }
 
-export async function updateFranchise(
+async function updateFranchiseNow(
   db: Database,
   league: League,
   id: string,
@@ -146,7 +147,7 @@ export async function updateFranchise(
   return written.ok ? done(franchise) : storage(written.error);
 }
 
-export async function deleteFranchise(db: Database, id: string): Promise<FranchiseResult<void>> {
+async function deleteFranchiseNow(db: Database, id: string): Promise<FranchiseResult<void>> {
   const stored = await db.get<unknown>(FRANCHISE_COLLECTION, id);
   if (!stored.ok) return storage(stored.error);
   const leagueId = (stored.value as { leagueId?: unknown } | null)?.leagueId;
@@ -160,3 +161,11 @@ export async function deleteFranchise(db: Database, id: string): Promise<Franchi
   ]);
   return removed.ok ? done(undefined) : storage(removed.error);
 }
+
+// Team writes run one at a time with accept, so a write cannot land between accept's reads and its season write.
+export const createFranchise = (...args: Parameters<typeof createFranchiseNow>) =>
+  acceptQueue(() => createFranchiseNow(...args));
+export const updateFranchise = (...args: Parameters<typeof updateFranchiseNow>) =>
+  acceptQueue(() => updateFranchiseNow(...args));
+export const deleteFranchise = (...args: Parameters<typeof deleteFranchiseNow>) =>
+  acceptQueue(() => deleteFranchiseNow(...args));

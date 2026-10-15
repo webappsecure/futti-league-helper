@@ -1,6 +1,7 @@
 import { LEAGUE_COLLECTION, createLeagueId, isLeague, validateLeagueInput, type FieldErrors, type League, type LeagueInput } from './league';
 import { leagueAbove, leagueBelow, linkedEditProblems } from './league-links';
 import type { Database, Op } from '@/storage/types';
+import { acceptQueue } from '@/seasons/accept-queue';
 import { getLeagueSeason } from '@/seasons/season-repository';
 import { ROSTER_COLLECTION } from '@/rosters/roster';
 import { SEASON_COLLECTION, isSeason } from '@/seasons/season';
@@ -61,7 +62,7 @@ export async function createLeague(
   return written.ok ? done(league) : storage(written.error);
 }
 
-export async function updateLeague(
+async function updateLeagueNow(
   db: Database,
   id: string,
   input: LeagueInput,
@@ -110,7 +111,7 @@ export async function updateLeague(
   return written.ok ? done(league) : storage(written.error);
 }
 
-export async function deleteLeague(db: Database, id: string): Promise<LeagueResult<void>> {
+async function deleteLeagueNow(db: Database, id: string): Promise<LeagueResult<void>> {
   const stored = await db.list<{ leagueId?: unknown }>(FRANCHISE_COLLECTION);
   if (!stored.ok) return storage(stored.error);
   const teamDocs = stored.value.filter((doc) => doc.value?.leagueId === id);
@@ -143,3 +144,9 @@ export async function deleteLeague(db: Database, id: string): Promise<LeagueResu
   const removed = await db.batch([...teamOps, ...seasonOps, ...unlinkOps, { type: 'delete', collection: COLLECTION, id }]);
   return removed.ok ? done(undefined) : storage(removed.error);
 }
+
+// League edits and deletes run one at a time with accept, so a delete cannot leave a season for a missing league.
+export const updateLeague = (...args: Parameters<typeof updateLeagueNow>) =>
+  acceptQueue(() => updateLeagueNow(...args));
+export const deleteLeague = (...args: Parameters<typeof deleteLeagueNow>) =>
+  acceptQueue(() => deleteLeagueNow(...args));
