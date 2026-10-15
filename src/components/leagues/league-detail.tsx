@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
@@ -78,18 +78,26 @@ export function LeagueDetail({
             <ThemedText type="smallBold">Game cards</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               Prints the cards for every team for the current season on US Letter landscape sheets, four teams per sheet.
+              {Platform.OS !== 'web' && ' Save as PDF opens the share sheet so you can save the file.'}
             </ThemedText>
             {printCards.error !== null && (
               <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
-                Could not print cards. {printCards.error}
+                {printCards.error.action === 'pdf' ? 'Could not save the PDF.' : 'Could not print cards.'} {printCards.error.message}
               </ThemedText>
             )}
             <ThemedView style={styles.actions}>
               <Button
-                label={printCards.printing ? 'Preparing...' : 'Print cards'}
-                disabled={printCards.printing}
+                label={printCards.active === 'print' ? 'Preparing...' : 'Print cards'}
+                disabled={printCards.active !== null}
                 onPress={printCards.print}
               />
+              {Platform.OS !== 'web' && (
+                <Button
+                  label={printCards.active === 'pdf' ? 'Preparing...' : 'Save cards as PDF'}
+                  disabled={printCards.active !== null}
+                  onPress={printCards.saveAsPdf}
+                />
+              )}
             </ThemedView>
           </ThemedView>
         )}

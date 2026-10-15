@@ -7,27 +7,32 @@ import { useDatabase } from '@/storage/storage-provider';
 import { listFranchises } from '@/teams/franchise-repository';
 import { buildCardSheets } from './build-card-sheets';
 import { loadCardAssets } from './load-card-assets';
+import { pdfFileName } from './pdf-file-name';
 import { printHtml } from './print-cards';
+import { savePdf } from './save-cards-pdf';
 
-/** Prints the league's cards for its accepted season; one print runs at a time. */
+export type CardsAction = 'print' | 'pdf';
+
+/** Prints or saves as PDF the league's cards for its accepted season; one action runs at a time. */
 export function usePrintCards(league: League, season: Season | null) {
   const db = useDatabase();
-  const [printing, setPrinting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [active, setActive] = useState<CardsAction | null>(null);
+  const [error, setError] = useState<{ action: CardsAction; message: string } | null>(null);
   const running = useRef(false);
 
-  const print = useCallback(async () => {
+  const start = useCallback(async (action: CardsAction) => {
     if (season === null || running.current) return;
     running.current = true;
-    setPrinting(true);
+    setActive(action);
     setError(null);
     try {
-      setError(await run());
+      const message = await run();
+      setError(message === null ? null : { action, message });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError({ action, message: e instanceof Error ? e.message : String(e) });
     } finally {
       running.current = false;
-      setPrinting(false);
+      setActive(null);
     }
 
     /** Returns the message to show, or null on success. */
@@ -37,7 +42,7 @@ export function usePrintCards(league: League, season: Season | null) {
       const rosters = await listRosters(db, league);
       if (!rosters.ok) return rosters.error.kind === 'storage' ? rosters.error.error.message : 'Could not read rosters.';
       if (teams.value.unreadable > 0 || rosters.value.unreadable > 0) {
-        return 'Some saved teams or rosters could not be read, so the cards were not printed.';
+        return 'Some saved teams or rosters could not be read, so the cards were not produced.';
       }
       const assets = await loadCardAssets();
       if (!assets.ok) return assets.error.message;
@@ -51,10 +56,14 @@ export function usePrintCards(league: League, season: Season | null) {
         pillFont: assets.value.pillFont,
       });
       if (!sheets.ok) return sheets.message;
-      const printed = await printHtml(sheets.html);
-      return printed.ok ? null : printed.error.message;
+      const done =
+        action === 'print' ? await printHtml(sheets.html) : await savePdf(sheets.html, pdfFileName(league.name, season!.index));
+      return done.ok ? null : done.error.message;
     }
   }, [db, league, season]);
 
-  return { print, printing, error };
+  const print = useCallback(() => start('print'), [start]);
+  const saveAsPdf = useCallback(() => start('pdf'), [start]);
+
+  return { print, saveAsPdf, active, error };
 }
