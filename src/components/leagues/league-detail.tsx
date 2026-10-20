@@ -9,6 +9,7 @@ import type { League } from '@/leagues/league';
 import { LinkedLeagues } from '@/components/leagues/linked-leagues';
 import { leagueAbove, leagueBelow } from '@/leagues/league-links';
 import { TeamsSection } from '@/components/teams/team-list';
+import { SeasonCard } from '@/components/seasons/season-card';
 import { usePrintCards } from '@/cards/use-print-cards';
 import { useLeagueSeason } from '@/seasons/use-league-season';
 import { useFranchises } from '@/teams/use-franchises';
@@ -72,6 +73,10 @@ export function LeagueDetail({
         </ThemedView>
 
         <LinkedLeagues league={league} leagues={leagues} onChanged={onLinksChanged} />
+
+        {season.state.status === 'ready' && season.state.season !== null && state.status === 'ready' && (
+          <SeasonCard key={season.state.season.id} league={league} season={season.state.season} teams={state.teams} refreshSeason={season.refresh} />
+        )}
 
         {accepted && (
           <ThemedView type="backgroundElement" style={styles.card}>
