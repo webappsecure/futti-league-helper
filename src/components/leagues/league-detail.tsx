@@ -47,6 +47,7 @@ export function LeagueDetail({
 }: LeagueDetailProps) {
   const { state, refresh, retry } = useFranchises(league);
   const season = useLeagueSeason(league);
+  const [archiveVersion, setArchiveVersion] = useState(0);
   const accepted = season.state.status === 'ready' && season.state.season !== null;
   const printCards = usePrintCards(league, season.state.status === 'ready' ? season.state.season : null);
   const [teamFocused, setTeamFocused] = useState(false);
@@ -76,11 +77,11 @@ export function LeagueDetail({
         <LinkedLeagues league={league} leagues={leagues} onChanged={onLinksChanged} />
 
         {season.state.status === 'ready' && season.state.season !== null && state.status === 'ready' && (
-          <SeasonCard key={season.state.season.id} league={league} season={season.state.season} teams={state.teams} refreshSeason={season.refresh} />
+          <SeasonCard key={season.state.season.id} league={league} season={season.state.season} teams={state.teams} refreshSeason={season.refresh} onArchiveChanged={() => setArchiveVersion((n) => n + 1)} />
         )}
 
         {season.state.status === 'ready' && season.state.season?.status === 'offseason' && league.relegation && (
-          <OffseasonCard key={`offseason-${season.state.season.id}`} league={league} season={season.state.season} />
+          <OffseasonCard key={`offseason-${season.state.season.id}`} league={league} season={season.state.season} archiveVersion={archiveVersion} />
         )}
 
         {accepted && (

@@ -20,9 +20,11 @@ interface SeasonCardProps {
   teams: Franchise[];
   /** Reloads the league's season after it changes. */
   refreshSeason: () => Promise<void>;
+  /** Called after the season ends or its finishing order is saved, so other cards can re-read the archive. */
+  onArchiveChanged?: () => void;
 }
 
-export function SeasonCard({ league, season, teams, refreshSeason }: SeasonCardProps) {
+export function SeasonCard({ league, season, teams, refreshSeason, onArchiveChanged }: SeasonCardProps) {
   const db = useDatabase();
   const archive = useSeasonArchive(season.id, season.status);
   const labelFor = (franchise: Franchise) =>
@@ -42,6 +44,7 @@ export function SeasonCard({ league, season, teams, refreshSeason }: SeasonCardP
       const result = await action();
       if (result.ok) {
         await Promise.all([refreshSeason(), archive.refresh()]);
+        onArchiveChanged?.();
         after();
       } else {
         setError(result.message);

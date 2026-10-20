@@ -18,11 +18,13 @@ import { displayName } from '@/teams/franchise';
 interface OffseasonCardProps {
   league: League;
   season: Season;
+  /** Changes whenever the season's archive is saved elsewhere, to re-read it. */
+  archiveVersion: number;
 }
 
 /** Choosing which teams leave the league this offseason. Only shown for a relegation league whose season has ended. */
-export function OffseasonCard({ league, season }: OffseasonCardProps) {
-  const archive = useSeasonArchive(season.id, season.status);
+export function OffseasonCard({ league, season, archiveVersion }: OffseasonCardProps) {
+  const archive = useSeasonArchive(season.id, `${season.status}:${archiveVersion}`);
   const plan = useOffseasonPlan(season.id);
 
   return (
@@ -51,7 +53,7 @@ export function OffseasonCard({ league, season }: OffseasonCardProps) {
         </ThemedText>
       )}
       {archive.state.status === 'ready' && plan.state.status === 'ready' && archive.state.archive !== null && (
-        <PlanEditor league={league} season={season} archive={archive.state.archive} saved={plan.state.plan} refresh={plan.refresh} />
+        <PlanEditor key={archive.state.archive.teams.map((t) => t.franchiseId).join(',')} league={league} season={season} archive={archive.state.archive} saved={plan.state.plan} refresh={plan.refresh} />
       )}
     </ThemedView>
   );
