@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -6,7 +6,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Accent, Spacing } from '@/constants/theme';
 import { dropIndex } from '@/seasons/season-archive';
 
 const ROW_HEIGHT = 52;
@@ -32,10 +32,20 @@ interface RowProps {
   disabled: boolean;
   drag: DragState;
   onMove: (from: number, to: number) => void;
+  /** Web only: a move made with the arrow keys, so focus can follow the row. */
+  onKeyMove: (id: string, from: number, to: number) => void;
+  registerNode: (id: string, node: Focusable | null) => void;
 }
 
-function Row({ row, index, count, disabled, drag, onMove }: RowProps) {
+interface Focusable {
+  focus?: () => void;
+}
+
+const isWeb = Platform.OS === 'web';
+
+function Row({ row, index, count, disabled, drag, onMove, onKeyMove, registerNode }: RowProps) {
   const { from, to, dy } = drag;
+  const [focused, setFocused] = useState(false);
   const reset = () => {
     'worklet';
     from.set(-1);
@@ -82,7 +92,22 @@ function Row({ row, index, count, disabled, drag, onMove }: RowProps) {
       <Animated.View
         accessible
         accessibilityLabel={`${row.label}, position ${index + 1} of ${count}`}
-        accessibilityHint="Press and hold, then drag to change the position"
+        accessibilityHint={isWeb ? 'Drag to change the position, or use the up and down arrow keys' : 'Press and hold, then drag to change the position'}
+        ref={(node: unknown) => registerNode(row.id, node as Focusable | null)}
+        {...(isWeb
+          ? {
+              tabIndex: disabled ? -1 : 0,
+              onFocus: () => setFocused(true),
+              onBlur: () => setFocused(false),
+              onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+                if (disabled) return;
+                const target = e.key === 'ArrowUp' ? index - 1 : e.key === 'ArrowDown' ? index + 1 : null;
+                if (target === null) return;
+                e.preventDefault();
+                if (target >= 0 && target < count) onKeyMove(row.id, index, target);
+              },
+            }
+          : null)}
         accessibilityActions={[
           { name: 'moveUp', label: 'Move up' },
           { name: 'moveDown', label: 'Move down' },
@@ -93,7 +118,7 @@ function Row({ row, index, count, disabled, drag, onMove }: RowProps) {
           else if (e.nativeEvent.actionName === 'moveDown') onMove(index, index + 1);
         }}
         style={[styles.slot, style]}>
-        <ThemedView type="backgroundSelected" style={[styles.row, disabled && styles.dim]}>
+        <ThemedView type="backgroundSelected" style={[styles.row, disabled && styles.dim, focused && styles.focused]}>
           <ThemedText style={styles.position}>{index + 1}.</ThemedText>
           <ThemedText style={styles.team} numberOfLines={1}>
             {row.label}
@@ -121,11 +146,35 @@ export function SortableList({ rows, disabled, onMove }: { rows: SortableRow[]; 
     dy.set(0);
   }, [orderKey, from, to, dy]);
 
+  // After an arrow-key move the rows are re-ordered in the DOM, which can drop focus: put it back on the moved row.
+  const nodes = useRef(new Map<string, Focusable>());
+  const refocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (refocus.current !== null) nodes.current.get(refocus.current)?.focus?.();
+    refocus.current = null;
+  }, [orderKey]);
+
   const drag: DragState = { from, to, dy };
   return (
     <ThemedView style={{ height: Math.max(0, rows.length * ROW_PITCH - Spacing.two) }}>
       {rows.map((row, i) => (
-        <Row key={row.id} row={row} index={i} count={rows.length} disabled={disabled} drag={drag} onMove={onMove} />
+        <Row
+          key={row.id}
+          row={row}
+          index={i}
+          count={rows.length}
+          disabled={disabled}
+          drag={drag}
+          onMove={onMove}
+          onKeyMove={(id, a, b) => {
+            refocus.current = id;
+            onMove(a, b);
+          }}
+          registerNode={(id, node) => {
+            if (node === null) nodes.current.delete(id);
+            else nodes.current.set(id, node);
+          }}
+        />
       ))}
     </ThemedView>
   );
@@ -135,6 +184,7 @@ const styles = StyleSheet.create({
   slot: { position: 'absolute', left: 0, right: 0, top: 0, height: ROW_HEIGHT, ...(Platform.OS === 'web' ? ({ cursor: 'grab', userSelect: 'none' } as object) : null) },
   row: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.three, borderRadius: Spacing.two },
   dim: { opacity: 0.6 },
+  focused: { borderWidth: 2, borderColor: Accent.primary },
   position: { width: 28 },
   team: { flex: 1 },
 });
