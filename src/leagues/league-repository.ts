@@ -6,6 +6,7 @@ import { getLeagueSeason } from '@/seasons/season-repository';
 import { ROSTER_COLLECTION } from '@/rosters/roster';
 import { SEASON_COLLECTION, isSeason } from '@/seasons/season';
 import { SEASON_ARCHIVE_COLLECTION } from '@/seasons/season-archive';
+import { OFFSEASON_PLAN_COLLECTION } from '@/offseason/offseason-plan';
 import { FRANCHISE_COLLECTION } from '@/teams/franchise-repository';
 
 const COLLECTION = LEAGUE_COLLECTION;
@@ -143,8 +144,9 @@ async function deleteLeagueNow(db: Database, id: string): Promise<LeagueResult<v
     .filter((doc) => (isSeason(doc.value) ? doc.value.leagueId === id : (doc.value as { leagueId?: unknown } | null)?.leagueId === id))
     .flatMap((doc): Op[] => [
       { type: 'delete', collection: SEASON_COLLECTION, id: doc.id },
-      // The archive shares the season's id; deleting an id that does not exist is harmless.
+      // The archive and the offseason plan share the season's id; deleting an id that does not exist is harmless.
       { type: 'delete', collection: SEASON_ARCHIVE_COLLECTION, id: doc.id },
+      { type: 'delete', collection: OFFSEASON_PLAN_COLLECTION, id: doc.id },
     ]);
   const removed = await db.batch([...teamOps, ...seasonOps, ...unlinkOps, { type: 'delete', collection: COLLECTION, id }]);
   return removed.ok ? done(undefined) : storage(removed.error);
