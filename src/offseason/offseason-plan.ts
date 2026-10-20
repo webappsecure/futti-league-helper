@@ -1,14 +1,27 @@
 import type { League } from '@/leagues/league';
+import { isRoster, type RosterPlayer } from '@/rosters/roster';
 import type { SeasonArchive } from '@/seasons/season-archive';
 
 export const OFFSEASON_PLAN_COLLECTION = 'offseason-plans';
 
-/** The teams leaving the league this offseason, by franchise id. One document per season; its id is the season id. */
+/** A team coming from a linked league, with the roster as adjusted for this league. Staged only; live data is unchanged. */
+export interface StagedArrival {
+  franchiseId: string;
+  fromLeagueId: string;
+  /** The season of the other league whose plan named this team. */
+  sourceSeasonId: string;
+  /** `promoted` arrives from the league below, `demoted` from the league above. */
+  movement: 'promoted' | 'demoted';
+  players: RosterPlayer[];
+}
+
+/** The teams leaving the league this offseason, by franchise id, and the teams staged to arrive. One document per season; its id is the season id. */
 export interface OffseasonPlan {
   seasonId: string;
   leagueId: string;
   promoted: string[];
   demoted: string[];
+  arrivals?: StagedArrival[];
 }
 
 export type DepartureError =
@@ -69,6 +82,19 @@ function isIdList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((id) => typeof id === 'string' && id.length > 0);
 }
 
+function isStagedArrival(value: unknown): value is StagedArrival {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  const named = (x: unknown) => typeof x === 'string' && x.length > 0;
+  return (
+    named(v.franchiseId) &&
+    named(v.fromLeagueId) &&
+    named(v.sourceSeasonId) &&
+    (v.movement === 'promoted' || v.movement === 'demoted') &&
+    isRoster({ franchiseId: v.franchiseId, leagueId: v.fromLeagueId, players: v.players })
+  );
+}
+
 export function isOffseasonPlan(value: unknown): value is OffseasonPlan {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -76,5 +102,8 @@ export function isOffseasonPlan(value: unknown): value is OffseasonPlan {
   if (typeof v.leagueId !== 'string' || v.leagueId.length === 0) return false;
   if (!isIdList(v.promoted) || !isIdList(v.demoted)) return false;
   const all = [...v.promoted, ...v.demoted];
-  return new Set(all).size === all.length;
+  if (new Set(all).size !== all.length) return false;
+  if (v.arrivals === undefined) return true;
+  if (!Array.isArray(v.arrivals) || !v.arrivals.every(isStagedArrival)) return false;
+  return new Set(v.arrivals.map((a: StagedArrival) => a.franchiseId)).size === v.arrivals.length;
 }

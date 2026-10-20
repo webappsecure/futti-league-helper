@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
+import { ArrivalsSection } from '@/components/offseason/arrivals-section';
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -8,6 +9,7 @@ import { Accent, Spacing } from '@/constants/theme';
 import type { League } from '@/leagues/league';
 import { suggestDepartures, validateDepartures, departureErrorText, type OffseasonPlan } from '@/offseason/offseason-plan';
 import { planErrorText, saveOffseasonPlan } from '@/offseason/offseason-plan-repository';
+import { useArrivalStatus } from '@/offseason/use-arrival-status';
 import { useOffseasonPlan } from '@/offseason/use-offseason-plan';
 import type { Season } from '@/seasons/season';
 import type { SeasonArchive } from '@/seasons/season-archive';
@@ -26,6 +28,10 @@ interface OffseasonCardProps {
 export function OffseasonCard({ league, season, archiveVersion }: OffseasonCardProps) {
   const archive = useSeasonArchive(season.id, `${season.status}:${archiveVersion}`);
   const plan = useOffseasonPlan(season.id);
+  const arrivals = useArrivalStatus(league);
+  const refreshPlan = async () => {
+    await Promise.all([plan.refresh(), arrivals.refresh()]);
+  };
 
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
@@ -53,7 +59,10 @@ export function OffseasonCard({ league, season, archiveVersion }: OffseasonCardP
         </ThemedText>
       )}
       {archive.state.status === 'ready' && plan.state.status === 'ready' && archive.state.archive !== null && (
-        <PlanEditor key={archive.state.archive.teams.map((t) => t.franchiseId).join(',')} league={league} season={season} archive={archive.state.archive} saved={plan.state.plan} refresh={plan.refresh} />
+        <>
+          <PlanEditor key={archive.state.archive.teams.map((t) => t.franchiseId).join(',')} league={league} season={season} archive={archive.state.archive} saved={plan.state.plan} refresh={refreshPlan} />
+          <ArrivalsSection league={league} hasPlan={plan.state.plan !== null} arrivals={arrivals} />
+        </>
       )}
     </ThemedView>
   );
