@@ -1,0 +1,238 @@
+Fütti League and Game Tracker
+
+Fütti (pronounced “footy”) is a made-up sport closely modeled on futsal, a real-world indoor version of soccer that young players often use to sharpen their skills. Instead of eleven players on a big field, each Fütti team puts five on a small pitch: a goalkeeper, two attackers and two defenders, plus a few substitutes on the bench. A match lasts forty minutes, split into two halves. The clock stops for fouls, injuries, goals and out-of-bounds balls, and there’s no extra time added at the end. Fütti changes a few of futsal’s rules to give it its own character. Fouls escalate from a simple warning, to a yellow card that sends a player to the sidelines until the next major stoppage, to a red card that removes them for the rest of the game and gives the other team a penalty kick. Games can also end early if one team builds a big enough lead late in the match, as if the leaders were running out the clock. Because the sport isn’t real, there are no real leagues, teams or star players to follow. The fun is in inventing your own.
+
+As a tabletop game, Fütti lets one person act out a full match on a printed game board using ordinary dice and paper player cards. Each card shows a player rated with a few numbers: how good they are at attacking, defending and keeping their temper, plus a goalkeeping rating for keepers. The game comes with a set of unnamed generic players, so you can draft or randomly deal them into your own teams and leagues. Play moves one game minute at a time. A roll of two dice picks which attacker and defender face off that minute. A second roll compares each player’s rating to the dice to decide whether the attacker gets a shot, the defender steals the ball, or the ball comes loose. Shots are then rolled against the goalkeeper’s rating. When the dice come up doubles, you check a special chart for dramatic events like hard tackles, scuffles, injuries, yellow and red cards, and breakaways. As you keep score on a scoresheet, the dice gradually tell the story of a believable match, so the game feels like coaching and watching a sports broadcast unfold at the same time.
+
+I want to create a program that is targetted to use on a tablet (either Android or iPad) but can also be used on a Windows or Mac computer or laptop as well. The technology of choice will be React Native Expo. 
+
+This program will be able to create Fütti leagues, manage the league throughout a season, and manage the offseason as well. In addition, the program will be able to support scheduling a season, playing each game, and keeping stats for all of the players and goaltenders in the league. Because most Fütti leagues are promotion and relegation leagues, there should be support for that as part of the offseason process as well.
+
+Here is a rough layout of how the progression of development should flow:
+
+1. Basic League Creation
+- Choose between a 6 team league, 8, 10, 12, 14, 16, 18, and 20
+- The first version of this tool will not support divisions and conferences, but make sure the program is designed in a way that support can be added easily in the future.
+- Choose between a relegation league or non relegation league.
+- If the league is a relegation league choose how many teams get promoted and how many teams get promoted each season. These are different values. It is possible to have one league have two teams getting demoted while none get promoted, while the other league has two getting promoted and none getting demoted, representing a senior league and junior league where the promoted teams from the junior league go to the senior league the next season and the two teams from the senior league getting demoted go to the junior league the next season.
+- Choose between the team name being used (like AFC Richmond) or city and team name (like Richmond Greyhounds)
+- Each team will have a city, a name, and primary and secondary colors chosen by a color picker.
+- Each team will have an intial team grade from A, B, C, D, and F - A being the best and F being the worst.
+- Leagues can be added, edited, and deleted. If deleting a league, confirm deletion first.
+
+2. Create a league based on the league creation guide
+	- Each team will have 6 standard players and two goaltenders
+	- Each standard player will have six attributes:
+		- a name (Last name only) 
+		- age
+		- an offense rating 	 (OF)
+		- a defense rating		 (DE)
+		- a sportsmanship rating (SP)
+		- 0-2 Control Stars.     (CO) not shown as a number, but rather as stars in the UI
+	- Each goaltender will have four attributes
+		- a name (Last name only)
+		- age
+		- a goaltending rating   (GO)
+		- a sportsmanship rating (SP)
+	- To determine each player's age, both standard players and goaltenders, roll 2 six-sided dice and add them together and consult the chart below:
+	
+	| 2d6 | AGE |
+	| --- | --- |
+	| 2   | 20  |
+	| 3   | 21  |
+	| 4   | 22  |
+	| 5   | 23  |
+	| 6   | 24  |
+	| 7   | 25  |
+	| 8   | 26  |
+	| 9   | 27  |
+	| 10  | 28  |
+	| 11  | 29  |
+	| 12  | 30  |
+	
+	- To determine each standard player's total offense and defense value, roll 2 six-sided dice and add them together and consult the chart below, based on the team's starting grade:
+	
+	| 2d6 | A | B | C | D | F |
+	| --- | - | - | - | - | - |
+	| 2   | 2 | 4 | 5 | 8 | 4 |
+	| 3   | 3 | 2 | 5 | 4 | 5 |
+	| 4   | 6 | 3 | 2 | 6 | 4 |
+	| 5   | 4 | 4 | 3 | 2 | 3 |
+	| 6   | 7 | 6 | 5 | 4 | 4 |
+	| 7   | 5 | 5 | 4 | 3 | 2 |
+	| 8   | 6 | 7 | 6 | 5 | 5 |
+	| 9   | 7 | 8 | 7 | 5 | 3 |
+	| 10  | 8 | 6 | 8 | 7 | 6 |
+	| 11  | 8 | 7 | 6 | 6 | 7 |
+	| 12  | 8 | 5 | 7 | 8 | 8 |
+	
+	- Then, based on total offense and defense, the offense and defense scores are distributed as follows for standard players:
+		- If the total offense and defense is a 2, then the player's offense is a 1 and defense is a 1.
+		- If the total offense and defense is a 3, then roll a six-sided die:
+			- 1-3: the player's offense is a 2 and defense is a 1
+			- 4-6: the player's offense is a 1 and defense is a 2
+		- If the total offense and defense is a 4, then roll a six-sided die:
+			- 1-4: the player's offense is a 2 and defense is a 2
+			- 5: the player's offense is a 3 and defense is a 1
+			- 6: the player's offense is a 1 and defense is a 3
+		- If the total offense and defense is a 5, then roll a six-sided die:
+			- 1-2: the player's offense is a 3 and defense is a 2
+			- 3-4: the player's offense is a 2 and defense is a 3
+			- 5: the player's offense is a 4 and defense is a 1
+			- 6: the player's offense is a 1 and defense is a 4
+		- If the total offense and defense is a 6, then roll a six-sided die:
+			- 1-2: the player's offense is a 3 and defense is a 3
+			- 3: the player's offense is a 4 and defense is a 2
+			- 4: the player's offense is a 2 and defense is a 4
+			- 5: the player's offense is a 5 and defense is a 1
+			- 6: the player's offense is a 1 and defense is a 5
+		- If the total offense and defense is a 7, then roll a six-sided die:
+			- 1-2: the player's offense is a 4 and defense is a 3
+			- 3-4: the player's offense is a 3 and defense is a 4
+			- 5: the player's offense is a 5 and defense is a 2
+			- 6: the player's offense is a 2 and defense is a 5
+		- If the total offense and defense is an 8, then roll a six-sided die:
+			- 1-4: the player's offense is a 4 and defense is a 4
+			- 5: the player's offense is a 5 and defense is a 3
+			- 6: the player's offense is a 3 and defense is a 5
+			
+	- Then, based on total offense and defense, determine the number of control stars the standard player has:
+		- If the total offense and defense is a 2, roll two six sided dice together and add them:
+			- 2: One star
+			- 3-12: No stars
+		- If the total offense and defense is a 3, roll two six sided dice together and add them:
+			- 2-3: One star
+			- 4-12: No stars	
+		- If the total offense and defense is a 4, roll two six sided dice together and add them:
+			- 2: Two stars
+			- 3-4: One star
+			- 5-12: No stars
+		- If the total offense and defense is a 5, roll two six sided dice together and add them:
+			- 2: Two stars
+			- 3-5: One star
+			- 6-12: No stars
+		- If the total offense and defense is a 6, roll two six sided dice together and add them:
+			- 2-3: Two stars
+			- 4-6: One star
+			- 7-12: No stars
+		- If the total offense and defense is a 7, roll two six sided dice together and add them:
+			- 2-3: Two stars
+			- 4-7: One star
+			- 8-12: No stars
+		- If the total offense and defense is a 8, roll two six sided dice together and add them:
+			- 2-4: Two stars
+			- 5-8: One star
+			- 9-12: No stars
+	- Both standard players and goaltenders get a sportsmanship value based on 2 six sided dice added together:
+		- 2-3: 1 sportsmanship
+		- 4-5: 2 sportsmanship
+		- 6-8: 3 sportsmanship
+		- 9-10: 4 sportsmanship
+		- 11-12: 5 sportsmanship
+	-Goaltenders get a sportsmanship value (SP) based on the following chart after rolling 2 six sided dice and adding them together (note that Goaltending is a quasi base 6 number with each digit being 1-6 instead of 0-5, based on being a target number of rolling 2 six sided dice and using one as a 10s digit and the other as a 1s digit, therefore the gap between 36 and 41. This should be taken into account when adding or subracting a goaltending rating. Adding 1 to a 36 goaltending rating makes it 41, not 37. Likewise, subtracting from 41 does not result in 40, it results in a 36):
+
+	| 2d6 | A  | B  | C  | D  | F  |
+	| --- | -- | -- | -- | -- | -- |
+	| 2   | 36 | 35 | 34 | 33 | 32 |
+	| 3   | 36 | 35 | 34 | 33 | 32 |
+	| 4   | 41 | 36 | 35 | 34 | 33 |
+	| 5   | 41 | 36 | 35 | 34 | 33 |
+	| 6   | 42 | 41 | 36 | 35 | 34 |
+	| 7   | 43 | 42 | 41 | 36 | 35 |
+	| 8   | 44 | 43 | 42 | 41 | 36 |
+	| 9   | 45 | 44 | 43 | 42 | 41 |
+	| 10  | 45 | 44 | 43 | 42 | 41 |
+	| 11  | 46 | 45 | 44 | 43 | 42 |
+	| 12  | 46 | 45 | 44 | 43 | 42 |	
+	
+	- Players and goaltenders can be rerolled several times until the commissioner is happy with the values. Once the commissioner accepts all of the values in the league, however, rerolls are locked out for league creation and those values are set for the first season.
+	
+3. Create a random name generator using a name file that has tens of thousands of names. There should be no duplicate names in all leagues throughout the entire history of all leagues. I will provide the name list.
+
+4. Run a league offseason based on the league creation guide.
+	- if the league is a relegation league, choose teams leaving the league through promotion and relegation and bring teams into the league to replace them. These can either be created teams or teams from another league, or teams that have previously left the league you are playing currently. Teams should always be considered mobile, meaning they do not have a permanant relationship with a league, but rather a seasonal relationship with a league. 
+	- If new teams are being created to replace demoted teams, determine the city, name and colors for the new team. They also get an intial team grade based on a roll of 1-6. On a 1, the team is rated a C. On a 2-3 the team is rated a D. On a 4-6 the team is rated an F.
+	- If new teams are being created to replace promoted teams, determine the city, name and colors for the new team. They also get an intial team grade based on a roll of 1-6. On a 1, the team is rated an A. On a 2-3 the team is rated a B. On a 4-6 the team is rated an C.
+	- New teams get a random team of players based on their intial team grade. They do not participate in the draft or free agency. Their initial team is generated per the charts from initial team creation.
+	- Existing teams in other leagues can be brought in as well. Players for teams replacing a demoted team will be be reduced by one point in offense and defense (minimum of one). Regenerate each player's control stars based on the control star section in initial player generation. Goaltenders will be reduced two points (minimum 31 see notes in team creation on how to properly reduce a goaltender value). These teams WILL participate in free agency and draft, aging and offseason player changes.
+	- Players for teams replacing a promoted team will be be increated by one point in offense and defense (maximum of five, and no players with more than eight total skill between offense and defense). Regenerate each player's control stars based on the control star section in initial player generation. Goaltenders will be increased two points (maximum 46 see notes in team creation on how to properly increate a goaltender value). These teams WILL participate in free agency and draft, aging and offseason player changes.
+	- Each team protects one player on their roster (this is a manual step where the commissioner will need to protect one player from each team) That player cannot be aged out or lost to free agency.
+	- Player aging - all teams players (except new team players) go up one year in age. The oldest player for each team not protected retires from the league. If there is a tie, the lowest rated player retires. If it is between a position player and a goaltender, the goaltender always goes first.
+	- Each team selects randomly one player to leave the team for the free agency pool.
+	- A free agency draft is conducted with the team that finished the best the previous season picking first. Teams can draft the player they just lost to free agency if they are still available. This is a manual step to be done by the commissioner.
+	- Evaluate all teams for if they are missing a position player or goaltender and create a draft pool based on total need with two extra position players and one extra goaltender being created based on the franchise guide rules on creating a draft player.
+		- determine draftee's name using random charts - both standard players and goaltenders
+		- determine drafee's starting age - both standard players and goaltenders
+			
+			| 2d6 | AGE |
+			| --- | --- |
+			| 2   | 18  |
+			| 3   | 18  |
+			| 4   | 19  |
+			| 5   | 19  |
+			| 6   | 20  |
+			| 7   | 20  |
+			| 8   | 20  |
+			| 9   | 21  |
+			| 10  | 21  |
+			| 11  | 22  |
+			| 12  | 22  |
+			
+		- determine the player's initial sportsmanship value (both standard players and goaltenders) using the section on generating initial sportsmanship found in the initial player generation above.
+		- for standard players, determine their starting total offense and defense
+		
+			| 2d6 | TOT |
+			| --- | --- |
+			| 2   | 8   |
+			| 3   | 4   |
+			| 4   | 6   |
+			| 5   | 2   |
+			| 6   | 4   |
+			| 7   | 3   |
+			| 8   | 4   |
+			| 9   | 4   |
+			| 10  | 7   |
+			| 11  | 6   |
+			| 12  | 8   |
+			
+		- for standard players, determine their offense and defense, and control stars based on those sections in the intial player generation above.
+		- for goaltenders, determine their goaltending rating based on the following chart:
+		
+			| 2d6 | GO  |
+			| --- | --- |
+			| 2   | 31  |
+			| 3   | 32  |
+			| 4   | 33  |
+			| 5   | 34  |
+			| 6   | 35  |
+			| 7   | 36  |
+			| 8   | 41  |
+			| 9   | 42  |
+			| 10  | 43  |
+			| 11  | 44  |
+			| 12  | 45  |
+			
+	- Teams draft in reverse order from their finish last season. Again, this is a manual step in the process.
+	- Players not chosen in the draft are permanently destroyed.
+	- Standard player abilities possibly change, this does not include retired players or newly drafted players or players on teams that were just created.
+		- If the player is 23 or under in age, roll a 1-6 for that player. On a 1-2 that player's total offense and defense goes up by one. 
+		- If the player is 24 or older, but not 30 yet, then they roll a 1-6 and on a 1 that player's total offense and defense goes up by one, but on a 6 it goes down by one.
+		- If the player is 30 or older, roll a 1-6 for that player. On a 5-6 that player's total offense and defense goes down by one.
+		- A player's total offense and defense cannot go above an 8.
+		- If a player's total offense and defense goes down to a 1 that player is automatically retired from the league and the team gets a new random drafted player using the draft player charts above.
+		- Recalculate offense and defense based on the section for assigning those values in initial player generation.
+			- one small exception to the assignment is used. If the player originally had a higher offense than a defense and the new values have a higher defense than an offense, flip the player offense and defense. The same is true in reverse for players with an original higher defense than offense.
+		- Recalculate control stars for that player based on the section for control stars in initial player generation.
+	- Goaltending ability possibly changes, this does not include retired goaltenders or newly drafted goaltenders or goaltenders on teams that were just created.
+		- If the goaltender is 23 or under in age, roll a 1-6 for that goaltender. On a 1 that goaltender's goaltending goes up by two. On a 2-3 that goaltender's goaltending rating goes up by a 1. 
+		- If the goaltender is 24 or older, but not 30 yet, then they roll a 1-6 and on a 1-2 that goaltender's goaltending rating goes up by one, but on a 5-6 it goes down by one.
+		- If the goaltender is 30 or older, roll a 1-6 for that goaltender. On a 4-5 that goaltenders goaltending goes down by one. On a 6 it goes down by two.
+		- A goaltender's goaltending cannot go above a 46
+		- If a player's goaltending rating goes down to a 26 that goaltender is automatically retired from the league and the team gets a new random drafted goaltender using the draft goaltender charts above.			
+	- The league is marked ready to play the next season after commissioner approval.
+	
+5. Printable game cards for each season
+	- will provide sample images and also desired background images for each card when we get to this milestone
+	
+	
+	

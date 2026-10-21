@@ -42,8 +42,5 @@ example
 /ios
 /android
 
-# AI Blueprint local workflow files
-.agents/
-.claude/
-blueprint/
-CLAUDE.md
+# Per-machine Claude settings
+.claude/settings.local.json
