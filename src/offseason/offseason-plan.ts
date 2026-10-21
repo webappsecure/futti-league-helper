@@ -34,6 +34,16 @@ export interface StagedNewTeam {
   players: RosterPlayer[];
 }
 
+/** What happens to one participating team's players. `retiredId` and `releasedId` are set together once aging has run. */
+export interface StagedTeamChange {
+  franchiseId: string;
+  protectedId: string;
+  /** The oldest unprotected player, who leaves the league. */
+  retiredId?: string;
+  /** An unprotected, non-retired player chosen at random for the free agency pool. */
+  releasedId?: string;
+}
+
 /** The teams leaving the league this offseason, by franchise id, and the teams staged to arrive or to be created. One document per season; its id is the season id. */
 export interface OffseasonPlan {
   seasonId: string;
@@ -42,6 +52,7 @@ export interface OffseasonPlan {
   demoted: string[];
   arrivals?: StagedArrival[];
   newTeams?: StagedNewTeam[];
+  teamChanges?: StagedTeamChange[];
 }
 
 export type DepartureError =
@@ -135,6 +146,16 @@ function isStagedNewTeam(value: unknown, leagueId: string): value is StagedNewTe
   return isRoster({ franchiseId: v.id, leagueId, players: v.players });
 }
 
+function isStagedTeamChange(value: unknown): value is StagedTeamChange {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  const named = (x: unknown): x is string => typeof x === 'string' && x.length > 0;
+  if (!named(v.franchiseId) || !named(v.protectedId)) return false;
+  if (v.retiredId === undefined && v.releasedId === undefined) return true;
+  if (!named(v.retiredId) || !named(v.releasedId)) return false;
+  return new Set([v.protectedId, v.retiredId, v.releasedId]).size === 3;
+}
+
 export function isOffseasonPlan(value: unknown): value is OffseasonPlan {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -154,6 +175,10 @@ export function isOffseasonPlan(value: unknown): value is OffseasonPlan {
     if (!Array.isArray(v.newTeams) || !v.newTeams.every((t) => isStagedNewTeam(t, leagueId))) return false;
     const ids = v.newTeams.map((t: StagedNewTeam) => t.id);
     if (new Set([...ids, ...arrivalIds]).size !== ids.length + arrivalIds.length) return false;
+  }
+  if (v.teamChanges !== undefined) {
+    if (!Array.isArray(v.teamChanges) || !v.teamChanges.every(isStagedTeamChange)) return false;
+    if (new Set(v.teamChanges.map((c: StagedTeamChange) => c.franchiseId)).size !== v.teamChanges.length) return false;
   }
   return true;
 }
