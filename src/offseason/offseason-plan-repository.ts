@@ -99,18 +99,29 @@ async function saveNow(db: Database, league: League, promoted: string[], demoted
 
 type Loaded<T> = { ok: true; value: T } | { ok: false; error: Error };
 
+/** Every league, this league's current record, and the leagues directly above and below it. Fails closed on an unreadable league. */
+async function resolveNeighbors(
+  db: Database,
+  league: League,
+): Promise<Loaded<{ leagues: League[]; current: League; above: League | null; below: League | null }>> {
+  const all = await listLeagues(db);
+  if (!all.ok) return { ok: false, error: all.error.kind === 'storage' ? all.error.error : new Error('Could not read leagues') };
+  if (all.value.unreadable > 0) return { ok: false, error: new Error('A saved league could not be read') };
+  const leagues = all.value.leagues;
+  const current = leagues.find((l) => l.id === league.id) ?? league;
+  return { ok: true, value: { leagues, current, above: leagueAbove(current, leagues), below: leagueBelow(current, leagues) } };
+}
+
 /** The linked leagues next to `league`, each with its season results and plan, and the ones that cannot send teams yet. */
 async function loadSources(
   db: Database,
   league: League,
 ): Promise<Loaded<{ sources: ArrivalSource[]; blocked: BlockedNeighbor[]; hasAbove: boolean; hasBelow: boolean }>> {
-  const all = await listLeagues(db);
-  if (!all.ok) return { ok: false, error: all.error.kind === 'storage' ? all.error.error : new Error('Could not read leagues') };
-  if (all.value.unreadable > 0) return { ok: false, error: new Error('A saved league could not be read') };
-  const current = all.value.leagues.find((l) => l.id === league.id) ?? league;
+  const resolved = await resolveNeighbors(db, league);
+  if (!resolved.ok) return resolved;
   const neighbors = [
-    { direction: 'above' as const, league: leagueAbove(current, all.value.leagues) },
-    { direction: 'below' as const, league: leagueBelow(current, all.value.leagues) },
+    { direction: 'above' as const, league: resolved.value.above },
+    { direction: 'below' as const, league: resolved.value.below },
   ];
   const sources: ArrivalSource[] = [];
   const blocked: BlockedNeighbor[] = [];
@@ -245,14 +256,13 @@ async function loadForNewTeams(db: Database, league: League): Promise<PlanFailur
   const own = await getOffseasonPlan(db, season.id);
   if (!own.ok) return storage(own.error);
   if (own.value === null) return fail({ kind: 'no-plan' });
-  const all = await listLeagues(db);
-  if (!all.ok) return storage(all.error.kind === 'storage' ? all.error.error : new Error('Could not read leagues'));
-  if (all.value.unreadable > 0) return storage(new Error('A saved league could not be read'));
-  const current = all.value.leagues.find((l) => l.id === league.id) ?? league;
-  const links = { hasAbove: leagueAbove(current, all.value.leagues) !== null, hasBelow: leagueBelow(current, all.value.leagues) !== null };
+  const resolved = await resolveNeighbors(db, league);
+  if (!resolved.ok) return storage(resolved.error);
+  const { leagues, current, above, below } = resolved.value;
+  const links = { hasAbove: above !== null, hasBelow: below !== null };
   const staged = await listStagedNewTeams(db);
   if (!staged.ok) return storage(staged.error);
-  return { ok: true, season, plan: own.value, links, chain: chainLeagueIds(current, all.value.leagues), staged: staged.value };
+  return { ok: true, season, plan: own.value, links, chain: chainLeagueIds(current, leagues), staged: staged.value };
 }
 
 /** Names a new roster may not use: burned, or already on another staged new team. */

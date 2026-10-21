@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, TextInput } from 'react-native';
 
+import { FieldError } from '@/components/field-error';
 import { Button, ChoiceButton } from '@/components/button';
 import { ColorPicker } from '@/components/teams/color-picker';
 import { ThemedText } from '@/components/themed-text';
@@ -31,15 +32,6 @@ interface NewTeamsSectionProps {
   arrivals: ReturnType<typeof useArrivalStatus>;
   /** Reloads the plan and arrivals after a change. */
   refresh: () => Promise<void>;
-}
-
-function FieldError({ text }: { text?: string }) {
-  if (!text) return null;
-  return (
-    <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
-      {text}
-    </ThemedText>
-  );
 }
 
 /** Newly created teams for the places linked leagues do not fill. */

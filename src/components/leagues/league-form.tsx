@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Switch, TextInput } from 'react-native';
 
+import { FieldError } from '@/components/field-error';
 import { Button, ChoiceButton } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -23,15 +24,6 @@ interface LeagueFormProps {
   initial: League | null;
   onSaved: (league: League) => void;
   onCancel: () => void;
-}
-
-function FieldError({ text }: { text?: string }) {
-  if (!text) return null;
-  return (
-    <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
-      {text}
-    </ThemedText>
-  );
 }
 
 export function LeagueForm({ initial, onSaved, onCancel }: LeagueFormProps) {
@@ -200,5 +192,4 @@ const styles = StyleSheet.create({
   counts: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.three },
   count: { gap: Spacing.two, minWidth: 200, flex: 1 },
   actions: { flexDirection: 'row', gap: Spacing.two },
-  error: { color: Accent.danger },
 });

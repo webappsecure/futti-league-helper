@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { StyleSheet, TextInput } from 'react-native';
 
+import { FieldError } from '@/components/field-error';
 import { Button, ChoiceButton } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Accent, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { League } from '@/leagues/league';
 import { GRADES } from '@/rules/charts';
@@ -25,15 +26,6 @@ interface TeamFormProps {
   initial: Franchise | null;
   onSaved: () => void;
   onCancel: () => void;
-}
-
-function FieldError({ text }: { text?: string }) {
-  if (!text) return null;
-  return (
-    <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
-      {text}
-    </ThemedText>
-  );
 }
 
 export function TeamForm({ league, initial, onSaved, onCancel }: TeamFormProps) {
@@ -160,5 +152,4 @@ const styles = StyleSheet.create({
   },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   actions: { flexDirection: 'row', gap: Spacing.two },
-  error: { color: Accent.danger },
 });
