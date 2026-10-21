@@ -47,6 +47,10 @@ export type PlanError =
   | { kind: 'arrivals-not-ready' }
   | { kind: 'unknown-player' }
   | { kind: 'protection-incomplete' }
+  | { kind: 'aging-not-run' }
+  | { kind: 'draft-complete' }
+  | { kind: 'not-in-pool' }
+  | { kind: 'no-picks' }
   | { kind: 'blocked'; blocked: BlockedNeighbor[] }
   | { kind: 'missing-team'; franchiseId: string }
   | { kind: 'no-season' }
@@ -207,7 +211,7 @@ async function stageNow(db: Database, league: League, rng: Rng): Promise<PlanRes
   const built = buildArrivals(expectedArrivals(loaded.value.sources), loaded.value.sources, rng);
   if (!built.ok) return fail({ kind: 'missing-team', franchiseId: built.franchiseId });
 
-  // Saved protections depend on who participates and on the adjusted ratings, so they are dropped.
+  // Saved protections and free agency picks depend on who participates and on the adjusted ratings, so they are dropped.
   const { seasonId, leagueId, promoted, demoted, newTeams } = own.value;
   const plan: OffseasonPlan = { seasonId, leagueId, promoted, demoted, arrivals: built.value, ...(newTeams ? { newTeams } : {}) };
   const written = await db.batch([{ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: season.id, value: plan }]);
@@ -392,6 +396,14 @@ export function planErrorText(error: PlanError, league: League): string {
       return 'That player is not on a team taking part in the offseason.';
     case 'protection-incomplete':
       return 'Protect one player on every team first.';
+    case 'aging-not-run':
+      return 'Run aging, retirement and release first.';
+    case 'draft-complete':
+      return 'Every team has already picked.';
+    case 'not-in-pool':
+      return 'That player is not available in free agency.';
+    case 'no-picks':
+      return 'There is no pick to undo.';
     case 'blocked':
       return error.blocked.map(blockedText).join(' ');
     case 'missing-team':

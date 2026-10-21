@@ -3,6 +3,7 @@ import { Redirect, router, type Href } from 'expo-router';
 import { Button } from '@/components/button';
 import { AgingStep } from '@/components/offseason/aging-step';
 import { ArrivalsStep } from '@/components/offseason/arrivals-step';
+import { FreeAgencyStep } from '@/components/offseason/free-agency-step';
 import { DeparturesStep } from '@/components/offseason/departures-step';
 import { NewTeamsSection } from '@/components/offseason/new-teams-section';
 import { OrderStep } from '@/components/offseason/order-step';
@@ -146,6 +147,9 @@ function WizardStepScreen({ league, season, step }: { league: League; season: Se
       )}
       {step === 'aging' && data.plan !== null && status !== null && (
         <AgingStep league={league} plan={data.plan} teams={data.teams} arrivals={status} nameOf={nameOf} refresh={refresh} />
+      )}
+      {step === 'free-agency' && data.plan !== null && status !== null && (
+        <FreeAgencyStep league={league} archive={data.archive} plan={data.plan} teams={data.teams} arrivals={status} nameOf={nameOf} refresh={refresh} />
       )}
     </WizardShell>
   );

@@ -2,7 +2,7 @@ import type { OffseasonPlan } from './offseason-plan';
 import type { ArrivalStatus } from './offseason-plan-repository';
 import { arrivalsReady, type ParticipatingTeam } from './roster-changes';
 
-export const WIZARD_STEPS = ['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging'] as const;
+export const WIZARD_STEPS = ['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging', 'free-agency'] as const;
 export type WizardStep = (typeof WIZARD_STEPS)[number];
 
 export const STEP_INFO: Record<WizardStep, { title: string; instruction: string }> = {
@@ -12,6 +12,7 @@ export const STEP_INFO: Record<WizardStep, { title: string; instruction: string 
   'new-teams': { title: 'New teams', instruction: 'Fill any places the linked leagues do not fill with newly created teams.' },
   protection: { title: 'Protection', instruction: 'Protect one player on each team. A protected player cannot retire or be released.' },
   aging: { title: 'Aging, retirement and release', instruction: 'Age every player a year, retire the oldest unprotected player on each team and release one more at random.' },
+  'free-agency': { title: 'Free agency draft', instruction: 'Each team picks one released player, in draft order. The team on the clock is shown.' },
 };
 
 export type StepStatus = 'complete' | 'incomplete';
@@ -43,6 +44,7 @@ export function stepStatuses({ plan, teams, arrivals }: WizardInput): StepStatus
     'new-teams': status(plan !== null),
     protection: status(protectedAll),
     aging: status(aged),
+    'free-agency': status(aged && teams.every((t) => (plan?.freeAgentPicks ?? []).some((p) => p.franchiseId === t.franchiseId))),
   };
 }
 

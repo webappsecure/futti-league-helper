@@ -11,14 +11,14 @@ const input = (p: OffseasonPlan | null, arrivals: WizardInput['arrivals'] = quie
 
 describe('steps', () => {
   it('lists the steps in order and recognizes their ids', () => {
-    expect([...WIZARD_STEPS]).toEqual(['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging']);
+    expect([...WIZARD_STEPS]).toEqual(['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging', 'free-agency']);
     expect(isWizardStep('aging')).toBe(true);
     expect(isWizardStep('nope')).toBe(false);
     expect(isWizardStep(undefined)).toBe(false);
   });
   it('has previous and next at both ends', () => {
     expect(previousStep('order')).toBeNull();
-    expect(nextStep('aging')).toBeNull();
+    expect(nextStep('free-agency')).toBeNull();
     expect(previousStep('arrivals')).toBe('departures');
     expect(nextStep('arrivals')).toBe('new-teams');
   });
@@ -26,7 +26,7 @@ describe('steps', () => {
 
 describe('stepStatuses', () => {
   it('has only the order complete with no plan', () => {
-    expect(stepStatuses(input(null))).toEqual({ order: 'complete', departures: 'incomplete', arrivals: 'incomplete', 'new-teams': 'incomplete', protection: 'incomplete', aging: 'incomplete' });
+    expect(stepStatuses(input(null))).toEqual({ order: 'complete', departures: 'incomplete', arrivals: 'incomplete', 'new-teams': 'incomplete', protection: 'incomplete', aging: 'incomplete', 'free-agency': 'incomplete' });
   });
   it('completes departures, arrivals and new teams for a plan with nothing expected', () => {
     const s = stepStatuses(input(plan()));
@@ -46,6 +46,12 @@ describe('stepStatuses', () => {
     expect([s.protection, s.aging]).toEqual(['complete', 'incomplete']);
     const aged = plan({ teamChanges: [{ franchiseId: 'a', protectedId: 'p', retiredId: 'r', releasedId: 'q' }, { franchiseId: 'b', protectedId: 'p', retiredId: 'r', releasedId: 'q' }] });
     expect(stepStatuses(input(aged)).aging).toBe('complete');
+    expect(stepStatuses(input(aged))['free-agency']).toBe('incomplete');
+    const partialPicks = { ...aged, freeAgentPicks: [{ franchiseId: 'a', playerId: 'q' }] };
+    expect(stepStatuses(input(partialPicks))['free-agency']).toBe('incomplete');
+    const allPicks = { ...aged, freeAgentPicks: [{ franchiseId: 'a', playerId: 'q' }, { franchiseId: 'b', playerId: 'r' }] };
+    expect(stepStatuses(input(allPicks))['free-agency']).toBe('complete');
+    expect(stepStatuses(input(plan({ freeAgentPicks: allPicks.freeAgentPicks })))['free-agency']).toBe('incomplete');
   });
   it('is incomplete when no teams take part', () => {
     expect(stepStatuses(input(plan(), quiet, [])).protection).toBe('incomplete');
@@ -59,7 +65,8 @@ describe('navigation rules', () => {
     expect(firstIncompleteStep(state(plan(), { ...quiet, expected: exp }))).toBe('arrivals');
     expect(firstIncompleteStep(state(plan()))).toBe('protection');
     const aged = plan({ teamChanges: ['a', 'b'].map((franchiseId) => ({ franchiseId, protectedId: 'p', retiredId: 'r', releasedId: 'q' })) });
-    expect(firstIncompleteStep(state(aged))).toBeNull();
+    expect(firstIncompleteStep(state(aged))).toBe('free-agency');
+    expect(firstIncompleteStep(state({ ...aged, freeAgentPicks: [{ franchiseId: 'a', playerId: 'q' }, { franchiseId: 'b', playerId: 'r' }] }))).toBeNull();
   });
   it('opens earlier and current steps but not later ones', () => {
     const s = state(null);
@@ -71,6 +78,7 @@ describe('navigation rules', () => {
     expect(canOpenStep('new-teams', withPlan)).toBe(true);
     expect(canOpenStep('protection', withPlan)).toBe(true);
     expect(canOpenStep('aging', withPlan)).toBe(false);
+    expect(canOpenStep('free-agency', withPlan)).toBe(false);
   });
   it('never blocks Next on the order or new-teams step', () => {
     const s = state(null);

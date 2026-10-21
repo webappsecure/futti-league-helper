@@ -4,14 +4,16 @@ import { acceptQueue } from '@/seasons/accept-queue';
 import { getSeasonArchive } from '@/seasons/season-archive-repository';
 import { getLeagueSeason } from '@/seasons/season-repository';
 import type { Database } from '@/storage/types';
+import type { SeasonArchive } from '@/seasons/season-archive';
 import { OFFSEASON_PLAN_COLLECTION, type OffseasonPlan, type StagedTeamChange } from './offseason-plan';
+import { draftOrder, teamOnTheClock, validatePick } from './free-agency';
 import { getArrivalStatus, getOffseasonPlan, type PlanError, type PlanResult } from './offseason-plan-repository';
 import { arrivalsReady, buildTeamChanges, participatingTeams, type ParticipatingTeam } from './roster-changes';
 
 const fail = (error: PlanError): { ok: false; error: PlanError } => ({ ok: false, error });
 const storage = (error: Error) => fail({ kind: 'storage', error });
 
-type Loaded = { ok: true; plan: OffseasonPlan; teams: ParticipatingTeam[] } | { ok: false; error: PlanError };
+type Loaded = { ok: true; plan: OffseasonPlan; teams: ParticipatingTeam[]; archive: SeasonArchive; sourceArchives: SeasonArchive[] } | { ok: false; error: PlanError };
 
 /** The offseason plan and its participating teams, once the season, archive and arrivals are ready for roster changes. */
 async function load(db: Database, league: League): Promise<Loaded> {
@@ -29,12 +31,19 @@ async function load(db: Database, league: League): Promise<Loaded> {
   const status = await getArrivalStatus(db, league);
   if (!status.ok) return storage(status.error);
   if (!arrivalsReady(status.value)) return fail({ kind: 'arrivals-not-ready' });
-  return { ok: true, plan: plan.value, teams: participatingTeams(archive.value, plan.value) };
+  const sourceArchives = status.value.sources.flatMap((source) => (source.archive === null ? [] : [source.archive]));
+  return { ok: true, plan: plan.value, teams: participatingTeams(archive.value, plan.value), archive: archive.value, sourceArchives };
 }
 
+/** Saves changed protections or aging results; free agency picks depend on them, so they are dropped. */
 async function write(db: Database, plan: OffseasonPlan, teamChanges: StagedTeamChange[]): Promise<PlanResult> {
   const next: OffseasonPlan = { ...plan, teamChanges };
-  const written = await db.batch([{ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: plan.seasonId, value: next }]);
+  delete next.freeAgentPicks;
+  return put(db, next);
+}
+
+async function put(db: Database, next: OffseasonPlan): Promise<PlanResult> {
+  const written = await db.batch([{ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: next.seasonId, value: next }]);
   return written.ok ? { ok: true, value: next } : storage(written.error);
 }
 
@@ -62,4 +71,31 @@ async function ageNow(db: Database, league: League, rng: Rng): Promise<PlanResul
   const built = buildTeamChanges(loaded.teams, protections, rng);
   if (!built.ok) return fail({ kind: 'protection-incomplete' });
   return write(db, loaded.plan, built.value);
+}
+
+/** Records a free agency pick for the team on the clock. */
+export const makeFreeAgentPick = (db: Database, league: League, playerId: string) => acceptQueue(() => pickNow(db, league, playerId));
+
+async function pickNow(db: Database, league: League, playerId: string): Promise<PlanResult> {
+  const loaded = await load(db, league);
+  if (!loaded.ok) return loaded;
+  const order = draftOrder(loaded.archive, loaded.plan, loaded.sourceArchives);
+  const picks = loaded.plan.freeAgentPicks ?? [];
+  const changes = loaded.plan.teamChanges ?? [];
+  const onTheClock = teamOnTheClock(order, picks);
+  const checked = validatePick({ order, teams: loaded.teams, changes, picks }, onTheClock ?? '', playerId);
+  // The pick is always for the team on the clock, so `not-on-the-clock` cannot come back.
+  if (!checked.ok) return fail({ kind: checked.error as Exclude<typeof checked.error, 'not-on-the-clock'> });
+  return put(db, { ...loaded.plan, freeAgentPicks: [...picks, { franchiseId: onTheClock!, playerId }] });
+}
+
+/** Removes the last free agency pick. */
+export const undoFreeAgentPick = (db: Database, league: League) => acceptQueue(() => undoNow(db, league));
+
+async function undoNow(db: Database, league: League): Promise<PlanResult> {
+  const loaded = await load(db, league);
+  if (!loaded.ok) return loaded;
+  const picks = loaded.plan.freeAgentPicks ?? [];
+  if (picks.length === 0) return fail({ kind: 'no-picks' });
+  return put(db, { ...loaded.plan, freeAgentPicks: picks.slice(0, -1) });
 }

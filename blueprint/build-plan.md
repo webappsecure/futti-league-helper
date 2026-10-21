@@ -31,7 +31,7 @@ Fütti League and Game Tracker. Features in rough build order; details come in
 - [x] 11c. **Offseason: new teams** - Fill remaining vacancies with newly created teams (identity, grade roll, generated roster), staged in the plan
 - [x] 12a. **Offseason: protection, aging and release** - Protect one player per team, age players, retire the oldest unprotected, and randomly release one player per team into the free agency pool, all staged in the plan
 - [x] 17. **Offseason wizard** - Replace the Offseason card with a step-by-step wizard, one screen per step with Back and Next: finishing order and departures, arrivals, new teams, protection, aging and release. League detail shows only a short status and a Continue offseason button; progress comes from the saved plan so it can be resumed
-- [ ] 12b. **Offseason: free agency draft** - Run the free agency draft from the released pool, best finisher first, staged in the plan
+- [x] 12b. **Offseason: free agency draft** - Run the free agency draft from the released pool, best finisher first, staged in the plan
 - [ ] 13. **Offseason: draft and progression** - Generate the draft pool, run the rookie draft, apply progression, replace retirees, and approve the offseason to ready the next season
 - [ ] 11d. **Offseason: former teams** - Fill a vacancy with an unassigned team that once played in the league, with rating adjustment by direction; built after 13 defines the unassigned-team pool (teams that leave with no linked league stay as franchises with no league)
 

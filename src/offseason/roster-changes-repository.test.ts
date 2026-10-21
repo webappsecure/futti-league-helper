@@ -7,7 +7,7 @@ import { createMemoryDatabase } from '@/storage/memory-database';
 import type { Database } from '@/storage/types';
 import { createFranchise, FRANCHISE_COLLECTION, listFranchises } from '@/teams/franchise-repository';
 import { addNewTeam, getOffseasonPlan, saveOffseasonPlan, stageArrivals } from './offseason-plan-repository';
-import { ageAndRelease, setProtection } from './roster-changes-repository';
+import { ageAndRelease, makeFreeAgentPick, setProtection, undoFreeAgentPick } from './roster-changes-repository';
 
 const make = (id: string, extra: Partial<League> = {}): League => ({
   id, name: `League ${id}`, size: 6, namingStyle: 'cityAndName', relegation: true, promotedCount: 1, demotedCount: 1, ...extra,
@@ -195,5 +195,120 @@ describe('arrivals', () => {
     await stageArrivals(db, l);
     await saveOffseasonPlan(db, u, [uIds[1]], [uIds[4]]);
     expect(await ageAndRelease(db, l)).toMatchObject({ ok: false, error: { kind: 'arrivals-not-ready' } });
+  });
+});
+
+describe('free agency draft', () => {
+  const pickAll = async (db: Database, l: League) => {
+    // The pool is read from the plan each time: always take the first released player still available.
+    for (;;) {
+      const plan = await planOf(db, `s-${l.id}`);
+      const picked = new Set((plan.freeAgentPicks ?? []).map((p) => p.playerId));
+      const next = (plan.teamChanges ?? []).map((c) => c.releasedId!).find((id) => !picked.has(id));
+      if (next === undefined) return plan;
+      const r = await makeFreeAgentPick(db, l, next);
+      if (!r.ok) return plan;
+    }
+  };
+
+  async function agedSolo() {
+    const s = await solo();
+    await protectAll(s.db, s.l, 's-S', s.ids.slice(1, 5));
+    await ageAndRelease(s.db, s.l, { rng: () => 0 });
+    return s;
+  }
+
+  it('runs a full draft in finishing order and rejects the next pick', async () => {
+    const { db, l, ids } = await agedSolo();
+    const plan = await pickAll(db, l);
+    expect(plan.freeAgentPicks?.map((p) => p.franchiseId)).toEqual(ids.slice(1, 5));
+    const released = new Set(plan.teamChanges!.map((c) => c.releasedId));
+    expect(plan.freeAgentPicks!.every((p) => released.has(p.playerId))).toBe(true);
+    expect(await makeFreeAgentPick(db, l, plan.teamChanges![0].releasedId!)).toMatchObject({ ok: false, error: { kind: 'draft-complete' } });
+  });
+
+  it('lets a team pick its own released player and rejects players outside the pool or already taken', async () => {
+    const { db, l, ids } = await agedSolo();
+    const plan = await planOf(db, 's-S');
+    const [first, second] = plan.teamChanges!;
+    expect(first.franchiseId).toBe(ids[1]);
+    const players = await firstPlayers(db, 's-S');
+    expect(await makeFreeAgentPick(db, l, players.get(ids[1])![0])).toMatchObject({ ok: false, error: { kind: 'not-in-pool' } });
+    expect((await makeFreeAgentPick(db, l, first.releasedId!)).ok).toBe(true);
+    expect(await makeFreeAgentPick(db, l, first.releasedId!)).toMatchObject({ ok: false, error: { kind: 'not-in-pool' } });
+    expect((await makeFreeAgentPick(db, l, second.releasedId!)).ok).toBe(true);
+  });
+
+  it('needs aging first', async () => {
+    const { db, l, ids } = await solo();
+    await protectAll(db, l, 's-S', ids.slice(1, 5));
+    expect(await makeFreeAgentPick(db, l, 'x')).toMatchObject({ ok: false, error: { kind: 'aging-not-run' } });
+  });
+
+  it('undoes the last pick and reports no picks', async () => {
+    const { db, l } = await agedSolo();
+    expect(await undoFreeAgentPick(db, l)).toMatchObject({ ok: false, error: { kind: 'no-picks' } });
+    const plan = await planOf(db, 's-S');
+    await makeFreeAgentPick(db, l, plan.teamChanges![0].releasedId!);
+    await makeFreeAgentPick(db, l, plan.teamChanges![1].releasedId!);
+    expect((await undoFreeAgentPick(db, l)).ok).toBe(true);
+    expect((await planOf(db, 's-S')).freeAgentPicks).toHaveLength(1);
+  });
+
+  it('clears picks when a protection changes, aging re-runs, departures are saved or arrivals are restaged', async () => {
+    const { db, l, ids } = await agedSolo();
+    const fresh = async () => {
+      await ageAndRelease(db, l, { rng: () => 0 });
+      await makeFreeAgentPick(db, l, (await planOf(db, 's-S')).teamChanges![0].releasedId!);
+      expect((await planOf(db, 's-S')).freeAgentPicks).toHaveLength(1);
+    };
+    await fresh();
+    await ageAndRelease(db, l, { rng: () => 0.5 });
+    expect((await planOf(db, 's-S')).freeAgentPicks).toBeUndefined();
+    await fresh();
+    const players = await firstPlayers(db, 's-S');
+    await setProtection(db, l, ids[1], players.get(ids[1])![1]);
+    expect((await planOf(db, 's-S')).freeAgentPicks).toBeUndefined();
+    await protectAll(db, l, 's-S', ids.slice(1, 5));
+    await fresh();
+    await saveOffseasonPlan(db, l, [ids[0]], [ids[5]]);
+    expect((await planOf(db, 's-S')).freeAgentPicks).toBeUndefined();
+  });
+
+  it('orders a linked pair with demoted arrivals first and promoted arrivals last, and clears picks on restage', async () => {
+    const { db, l, u, lIds, uIds } = await pair();
+    await stageArrivals(db, l);
+    await stageArrivals(db, u);
+    const lPlayers = await firstPlayers(db, 's-L');
+    const uPlayers = await firstPlayers(db, 's-U');
+    const teamsL = [uIds[5], ...lIds.slice(1, 5)];
+    for (const id of teamsL) await setProtection(db, l, id, (lPlayers.get(id) ?? uPlayers.get(id))![0]);
+    await ageAndRelease(db, l, { rng: () => 0 });
+    const plan = await pickAll(db, l);
+    expect(plan.freeAgentPicks?.map((p) => p.franchiseId)).toEqual([uIds[5], ...lIds.slice(1, 5)]);
+    await stageArrivals(db, l);
+    expect((await planOf(db, 's-L')).freeAgentPicks).toBeUndefined();
+    // The upper league gets a promoted arrival, who picks last.
+    const upperTeams = [...uIds.slice(1, 5), lIds[0]];
+    for (const id of upperTeams) await setProtection(db, u, id, (lPlayers.get(id) ?? uPlayers.get(id))![0]);
+    await ageAndRelease(db, u, { rng: () => 0 });
+    expect((await pickAll(db, u)).freeAgentPicks?.map((p) => p.franchiseId)).toEqual(upperTeams);
+  });
+
+  it('is not allowed while arrivals are not ready', async () => {
+    const { db, l } = await pair();
+    expect(await makeFreeAgentPick(db, l, 'x')).toMatchObject({ ok: false, error: { kind: 'arrivals-not-ready' } });
+    expect(await undoFreeAgentPick(db, l)).toMatchObject({ ok: false, error: { kind: 'arrivals-not-ready' } });
+  });
+
+  it('keeps the old plan when the write fails and never touches live data', async () => {
+    const { db, l } = await agedSolo();
+    const before = await snapshot(db);
+    const plan = await planOf(db, 's-S');
+    const failing: Database = { ...db, get: db.get.bind(db), list: db.list.bind(db), close: db.close.bind(db), batch: async () => ({ ok: false, error: new Error('disk full') }) };
+    expect(await makeFreeAgentPick(failing, l, plan.teamChanges![0].releasedId!)).toMatchObject({ ok: false, error: { kind: 'storage' } });
+    expect((await planOf(db, 's-S')).freeAgentPicks).toBeUndefined();
+    await makeFreeAgentPick(db, l, plan.teamChanges![0].releasedId!);
+    expect(await snapshot(db)).toBe(before);
   });
 });

@@ -44,6 +44,12 @@ export interface StagedTeamChange {
   releasedId?: string;
 }
 
+/** One free agency pick: `playerId` is a released player, taken by `franchiseId`. */
+export interface StagedFreeAgentPick {
+  franchiseId: string;
+  playerId: string;
+}
+
 /** The teams leaving the league this offseason, by franchise id, and the teams staged to arrive or to be created. One document per season; its id is the season id. */
 export interface OffseasonPlan {
   seasonId: string;
@@ -53,6 +59,8 @@ export interface OffseasonPlan {
   arrivals?: StagedArrival[];
   newTeams?: StagedNewTeam[];
   teamChanges?: StagedTeamChange[];
+  /** Free agency picks in the order they were made. */
+  freeAgentPicks?: StagedFreeAgentPick[];
 }
 
 export type DepartureError =
@@ -179,6 +187,19 @@ export function isOffseasonPlan(value: unknown): value is OffseasonPlan {
   if (v.teamChanges !== undefined) {
     if (!Array.isArray(v.teamChanges) || !v.teamChanges.every(isStagedTeamChange)) return false;
     if (new Set(v.teamChanges.map((c: StagedTeamChange) => c.franchiseId)).size !== v.teamChanges.length) return false;
+  }
+  if (v.freeAgentPicks !== undefined) {
+    if (!Array.isArray(v.freeAgentPicks)) return false;
+    const picks = v.freeAgentPicks as unknown[];
+    const valid = picks.every((p) => {
+      if (typeof p !== 'object' || p === null) return false;
+      const q = p as Record<string, unknown>;
+      return typeof q.franchiseId === 'string' && q.franchiseId.length > 0 && typeof q.playerId === 'string' && q.playerId.length > 0;
+    });
+    if (!valid) return false;
+    const list = picks as StagedFreeAgentPick[];
+    if (new Set(list.map((p) => p.franchiseId)).size !== list.length) return false;
+    if (new Set(list.map((p) => p.playerId)).size !== list.length) return false;
   }
   return true;
 }
