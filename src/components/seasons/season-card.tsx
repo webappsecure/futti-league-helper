@@ -9,8 +9,7 @@ import { Accent, Spacing } from '@/constants/theme';
 import type { League } from '@/leagues/league';
 import type { Season } from '@/seasons/season';
 import { reorderTeams } from '@/seasons/season-archive';
-import { finishErrorText, finishSeason, updateFinishingOrder } from '@/seasons/season-archive-repository';
-import { useSeasonArchive } from '@/seasons/use-season-archive';
+import { finishErrorText, finishSeason } from '@/seasons/season-archive-repository';
 import { useDatabase } from '@/storage/storage-provider';
 import { displayName, identityForSeason, type Franchise } from '@/teams/franchise';
 
@@ -20,18 +19,14 @@ interface SeasonCardProps {
   teams: Franchise[];
   /** Reloads the league's season after it changes. */
   refreshSeason: () => Promise<void>;
-  /** Called after the season ends or its finishing order is saved, so other cards can re-read the archive. */
-  onArchiveChanged?: () => void;
 }
 
-export function SeasonCard({ league, season, teams, refreshSeason, onArchiveChanged }: SeasonCardProps) {
+export function SeasonCard({ league, season, teams, refreshSeason }: SeasonCardProps) {
   const db = useDatabase();
-  const archive = useSeasonArchive(season.id, season.status);
   const labelFor = (franchise: Franchise) =>
     displayName(identityForSeason(franchise, season.index) ?? franchise.identities[0], league.namingStyle);
 
   const [order, setOrder] = useState<string[]>(() => teams.map((t) => t.id));
-  const [editing, setEditing] = useState(false);
   const [confirmingEnd, setConfirmingEnd] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +38,7 @@ export function SeasonCard({ league, season, teams, refreshSeason, onArchiveChan
     try {
       const result = await action();
       if (result.ok) {
-        await Promise.all([refreshSeason(), archive.refresh()]);
-        onArchiveChanged?.();
+        await refreshSeason();
         after();
       } else {
         setError(result.message);
@@ -61,12 +55,6 @@ export function SeasonCard({ league, season, teams, refreshSeason, onArchiveChan
       const r = await finishSeason(db, league, order);
       return r.ok ? { ok: true } : { ok: false, message: finishErrorText(r.error) };
     }, () => setConfirmingEnd(false));
-
-  const saveOrder = () =>
-    run(async () => {
-      const r = await updateFinishingOrder(db, league, order);
-      return r.ok ? { ok: true } : { ok: false, message: finishErrorText(r.error) };
-    }, () => setEditing(false));
 
   const move = (from: number, to: number) => setOrder((current) => reorderTeams(current, from, to));
   const activeRows = order.flatMap((id) => {
@@ -111,65 +99,10 @@ export function SeasonCard({ league, season, teams, refreshSeason, onArchiveChan
         </>
       )}
 
-      {season.status !== 'active' && archive.state.status === 'loading' && <ThemedText type="small">Loading results...</ThemedText>}
-      {season.status !== 'active' && archive.state.status === 'error' && (
-        <>
-          <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
-            Could not load the season results. {archive.state.message}
-          </ThemedText>
-          <ThemedView style={styles.actions}>
-            <Button label="Retry" onPress={archive.retry} />
-          </ThemedView>
-        </>
-      )}
-      {season.status !== 'active' && archive.state.status === 'ready' && (
-        <>
-          <ThemedText type="small" themeColor="textSecondary">
-            This season has ended. Its rosters and team names are saved.
-          </ThemedText>
-          {archive.state.archive === null ? (
-            <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
-              The saved results for this season could not be found.
-            </ThemedText>
-          ) : editing ? (
-            <>
-              <SortableList
-                rows={order.flatMap((id) => {
-                  const saved = archive.state.status === 'ready' ? archive.state.archive?.teams.find((t) => t.franchiseId === id) : undefined;
-                  return saved ? [{ id, label: displayName(saved.identity, league.namingStyle) }] : [];
-                })}
-                disabled={busy}
-                onMove={move}
-              />
-              <ThemedView style={styles.actions}>
-                <Button label={busy ? 'Saving...' : 'Save order'} variant="primary" disabled={busy} onPress={saveOrder} />
-                <Button label="Cancel" disabled={busy} onPress={() => setEditing(false)} />
-              </ThemedView>
-            </>
-          ) : (
-            <>
-              <ThemedView style={styles.list}>
-                {archive.state.archive.teams.map((t) => (
-                  <ThemedText key={t.franchiseId}>
-                    {t.position}. {displayName(t.identity, league.namingStyle)}
-                  </ThemedText>
-                ))}
-              </ThemedView>
-              {season.status === 'offseason' && (
-                <ThemedView style={styles.actions}>
-                  <Button
-                    label="Edit finishing order"
-                    onPress={() => {
-                      setOrder(archive.state.status === 'ready' && archive.state.archive ? archive.state.archive.teams.map((t) => t.franchiseId) : []);
-                      setError(null);
-                      setEditing(true);
-                    }}
-                  />
-                </ThemedView>
-              )}
-            </>
-          )}
-        </>
+      {season.status !== 'active' && (
+        <ThemedText type="small" themeColor="textSecondary">
+          Season {season.index} has ended. Its rosters and team names are saved.
+        </ThemedText>
       )}
     </ThemedView>
   );

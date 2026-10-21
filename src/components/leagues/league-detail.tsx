@@ -9,7 +9,7 @@ import type { League } from '@/leagues/league';
 import { LinkedLeagues } from '@/components/leagues/linked-leagues';
 import { leagueAbove, leagueBelow } from '@/leagues/league-links';
 import { TeamsSection } from '@/components/teams/team-list';
-import { OffseasonCard } from '@/components/offseason/offseason-card';
+import { OffseasonStatusCard } from '@/components/offseason/offseason-status-card';
 import { SeasonCard } from '@/components/seasons/season-card';
 import { usePrintCards } from '@/cards/use-print-cards';
 import { useLeagueSeason } from '@/seasons/use-league-season';
@@ -47,7 +47,6 @@ export function LeagueDetail({
 }: LeagueDetailProps) {
   const { state, refresh, retry } = useFranchises(league);
   const season = useLeagueSeason(league);
-  const [archiveVersion, setArchiveVersion] = useState(0);
   const accepted = season.state.status === 'ready' && season.state.season !== null;
   const printCards = usePrintCards(league, season.state.status === 'ready' ? season.state.season : null);
   const [teamFocused, setTeamFocused] = useState(false);
@@ -77,11 +76,11 @@ export function LeagueDetail({
         <LinkedLeagues league={league} leagues={leagues} onChanged={onLinksChanged} />
 
         {season.state.status === 'ready' && season.state.season !== null && state.status === 'ready' && (
-          <SeasonCard key={season.state.season.id} league={league} season={season.state.season} teams={state.teams} refreshSeason={season.refresh} onArchiveChanged={() => setArchiveVersion((n) => n + 1)} />
+          <SeasonCard key={season.state.season.id} league={league} season={season.state.season} teams={state.teams} refreshSeason={season.refresh} />
         )}
 
         {season.state.status === 'ready' && season.state.season?.status === 'offseason' && league.relegation && (
-          <OffseasonCard key={`offseason-${season.state.season.id}`} league={league} season={season.state.season} archiveVersion={archiveVersion} />
+          <OffseasonStatusCard key={`offseason-${season.state.season.id}`} league={league} season={season.state.season} />
         )}
 
         {accepted && (

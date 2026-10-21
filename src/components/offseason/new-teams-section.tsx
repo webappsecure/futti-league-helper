@@ -53,8 +53,7 @@ export function NewTeamsSection({ league, plan, arrivals, refresh }: NewTeamsSec
   if (plan === null) {
     return (
       <ThemedView style={styles.section}>
-        <ThemedText type="smallBold">New teams</ThemedText>
-        <ThemedText type="small">Save this league&apos;s plan above before adding new teams.</ThemedText>
+          <ThemedText type="small">Save this league&apos;s plan above before adding new teams.</ThemedText>
       </ThemedView>
     );
   }
@@ -116,7 +115,6 @@ export function NewTeamsSection({ league, plan, arrivals, refresh }: NewTeamsSec
 
   return (
     <ThemedView style={styles.section}>
-      <ThemedText type="smallBold">New teams</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         Places a linked league does not fill can go to newly created teams. The grade is rolled and the roster generated. Nothing changes until the offseason is approved.
       </ThemedText>

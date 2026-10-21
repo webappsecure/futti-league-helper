@@ -74,7 +74,6 @@ function ArrivalsBody({ league, hasPlan, status, refresh }: { league: League; ha
 
   return (
     <ThemedView style={styles.section}>
-      <ThemedText type="smallBold">Arrivals</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         Teams moving in from the linked leagues. Their ratings are adjusted and control stars rerolled when staged. Nothing changes until the offseason is approved.
       </ThemedText>

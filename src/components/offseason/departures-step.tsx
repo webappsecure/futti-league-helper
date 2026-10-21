@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
-import { ArrivalsSection } from '@/components/offseason/arrivals-section';
-import { NewTeamsSection } from '@/components/offseason/new-teams-section';
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -10,65 +8,10 @@ import { Accent, Spacing } from '@/constants/theme';
 import type { League } from '@/leagues/league';
 import { suggestDepartures, validateDepartures, departureErrorText, type OffseasonPlan } from '@/offseason/offseason-plan';
 import { planErrorText, saveOffseasonPlan } from '@/offseason/offseason-plan-repository';
-import { useArrivalStatus } from '@/offseason/use-arrival-status';
-import { useOffseasonPlan } from '@/offseason/use-offseason-plan';
 import type { Season } from '@/seasons/season';
 import type { SeasonArchive } from '@/seasons/season-archive';
-import { useSeasonArchive } from '@/seasons/use-season-archive';
 import { useDatabase } from '@/storage/storage-provider';
 import { displayName } from '@/teams/franchise';
-
-interface OffseasonCardProps {
-  league: League;
-  season: Season;
-  /** Changes whenever the season's archive is saved elsewhere, to re-read it. */
-  archiveVersion: number;
-}
-
-/** Choosing which teams leave the league this offseason. Only shown for a relegation league whose season has ended. */
-export function OffseasonCard({ league, season, archiveVersion }: OffseasonCardProps) {
-  const archive = useSeasonArchive(season.id, `${season.status}:${archiveVersion}`);
-  const plan = useOffseasonPlan(season.id);
-  const arrivals = useArrivalStatus(league);
-  const refreshPlan = async () => {
-    await Promise.all([plan.refresh(), arrivals.refresh()]);
-  };
-
-  return (
-    <ThemedView type="backgroundElement" style={styles.card}>
-      <ThemedText type="smallBold">Offseason: promotion and relegation</ThemedText>
-      {(archive.state.status === 'loading' || plan.state.status === 'loading') && <ThemedText type="small">Loading...</ThemedText>}
-      {(archive.state.status === 'error' || plan.state.status === 'error') && (
-        <>
-          <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
-            Could not load the offseason. {archive.state.status === 'error' ? archive.state.message : plan.state.status === 'error' ? plan.state.message : ''}
-          </ThemedText>
-          <ThemedView style={styles.actions}>
-            <Button
-              label="Retry"
-              onPress={() => {
-                archive.retry();
-                plan.retry();
-              }}
-            />
-          </ThemedView>
-        </>
-      )}
-      {archive.state.status === 'ready' && plan.state.status === 'ready' && archive.state.archive === null && (
-        <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
-          The saved results for this season could not be found.
-        </ThemedText>
-      )}
-      {archive.state.status === 'ready' && plan.state.status === 'ready' && archive.state.archive !== null && (
-        <>
-          <PlanEditor key={archive.state.archive.teams.map((t) => t.franchiseId).join(',')} league={league} season={season} archive={archive.state.archive} saved={plan.state.plan} refresh={refreshPlan} />
-          <ArrivalsSection league={league} hasPlan={plan.state.plan !== null} arrivals={arrivals} />
-          <NewTeamsSection league={league} plan={plan.state.plan} arrivals={arrivals} refresh={refreshPlan} />
-        </>
-      )}
-    </ThemedView>
-  );
-}
 
 interface PlanEditorProps {
   league: League;
@@ -78,7 +21,7 @@ interface PlanEditorProps {
   refresh: () => Promise<void>;
 }
 
-function PlanEditor({ league, season, archive, saved, refresh }: PlanEditorProps) {
+export function PlanEditor({ league, season, archive, saved, refresh }: PlanEditorProps) {
   const db = useDatabase();
   const [initial] = useState(() => saved ?? suggestDepartures(archive, league));
   const [promoted, setPromoted] = useState<string[]>(initial.promoted);
@@ -181,7 +124,6 @@ function Toggle({ label, name, selected, disabled, onPress }: { label: string; n
 }
 
 const styles = StyleSheet.create({
-  card: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.two },
   list: { gap: Spacing.two },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   position: { width: 28 },
@@ -191,3 +133,16 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: Spacing.two },
   error: { color: Accent.danger },
 });
+
+interface DeparturesStepProps {
+  league: League;
+  season: Season;
+  archive: SeasonArchive;
+  plan: OffseasonPlan | null;
+  refresh: () => Promise<void>;
+}
+
+/** Choosing which teams leave the league; remounts when the set of teams changes. */
+export function DeparturesStep({ league, season, archive, plan, refresh }: DeparturesStepProps) {
+  return <PlanEditor key={archive.teams.map((t) => t.franchiseId).join(',')} league={league} season={season} archive={archive} saved={plan} refresh={refresh} />;
+}
