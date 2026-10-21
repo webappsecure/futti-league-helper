@@ -2,7 +2,7 @@ import { LEAGUE_COLLECTION, type League } from '@/leagues/league';
 import { generateLeagueRosters } from '@/rosters/roster-repository';
 import { ROSTER_COLLECTION } from '@/rosters/roster';
 import { acceptLeague } from '@/seasons/accept-league';
-import { finishSeason, getSeasonArchive } from '@/seasons/season-archive-repository';
+import { finishSeason, getSeasonArchive, updateFinishingOrder } from '@/seasons/season-archive-repository';
 import { createMemoryDatabase } from '@/storage/memory-database';
 import type { Database } from '@/storage/types';
 import { createFranchise, FRANCHISE_COLLECTION, listFranchises } from '@/teams/franchise-repository';
@@ -310,5 +310,54 @@ describe('free agency draft', () => {
     expect((await planOf(db, 's-S')).freeAgentPicks).toBeUndefined();
     await makeFreeAgentPick(db, l, plan.teamChanges![0].releasedId!);
     expect(await snapshot(db)).toBe(before);
+  });
+});
+
+describe('editing the finishing order', () => {
+  /** A linked pair U/L and an unrelated league S, each with a started draft. */
+  async function drafts() {
+    const { db, u, l, uIds, lIds } = await pair();
+    const s = make('S');
+    const sIds = await build(db, s);
+    await saveOffseasonPlan(db, s, [sIds[0]], [sIds[5]]);
+    await stageArrivals(db, l);
+    const lPlayers = await firstPlayers(db, 's-L');
+    const uPlayers = await firstPlayers(db, 's-U');
+    for (const id of [uIds[5], ...lIds.slice(1, 5)]) await setProtection(db, l, id, (lPlayers.get(id) ?? uPlayers.get(id))![0]);
+    await ageAndRelease(db, l, { rng: () => 0 });
+    await protectAll(db, s, 's-S', sIds.slice(1, 5));
+    await ageAndRelease(db, s, { rng: () => 0 });
+    for (const [league, seasonId] of [[l, 's-L'], [s, 's-S']] as const) {
+      const plan = await planOf(db, seasonId);
+      expect((await makeFreeAgentPick(db, league, plan.teamChanges![0].releasedId!)).ok).toBe(true);
+    }
+    return { db, u, l, s, uIds, lIds, sIds };
+  }
+
+  it('clears picks in a linked league that took teams from the edited season, and keeps the rest', async () => {
+    const { db, u, uIds } = await drafts();
+    expect((await updateFinishingOrder(db, u, [...uIds].reverse())).ok).toBe(true);
+    const l = await planOf(db, 's-L');
+    expect(l.freeAgentPicks).toBeUndefined();
+    expect(l.teamChanges).toHaveLength(5);
+    expect(l.teamChanges?.every((c) => c.retiredId !== undefined)).toBe(true);
+    expect((await planOf(db, 's-S')).freeAgentPicks).toHaveLength(1);
+  });
+
+  it('clears the picks in its own plan and keeps protections and aging results', async () => {
+    const { db, s, sIds } = await drafts();
+    expect((await updateFinishingOrder(db, s, [...sIds].reverse())).ok).toBe(true);
+    const plan = await planOf(db, 's-S');
+    expect(plan.freeAgentPicks).toBeUndefined();
+    expect(plan.teamChanges?.every((c) => c.retiredId !== undefined)).toBe(true);
+    expect((await planOf(db, 's-L')).freeAgentPicks).toHaveLength(1);
+  });
+
+  it('fails without changing the archive when a saved plan cannot be read', async () => {
+    const { db, s, sIds } = await drafts();
+    await db.batch([{ type: 'put', collection: 'offseason-plans', id: 'bad', value: { seasonId: 'bad' } }]);
+    const before = await getSeasonArchive(db, 's-S');
+    expect(await updateFinishingOrder(db, s, [...sIds].reverse())).toMatchObject({ ok: false, error: { kind: 'storage' } });
+    expect(await getSeasonArchive(db, 's-S')).toEqual(before);
   });
 });

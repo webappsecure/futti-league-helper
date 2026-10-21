@@ -1,6 +1,7 @@
 import type { League } from '@/leagues/league';
 import { listRosters } from '@/rosters/roster-repository';
-import { fail as failResult, ok, type Database, type Result } from '@/storage/types';
+import { isOffseasonPlan, OFFSEASON_PLAN_COLLECTION } from '@/offseason/offseason-plan';
+import { fail as failResult, ok, type Database, type Op, type Result } from '@/storage/types';
 import { listFranchises } from '@/teams/franchise-repository';
 import { acceptQueue } from './accept-queue';
 import { SEASON_COLLECTION } from './season';
@@ -81,7 +82,18 @@ async function updateNow(db: Database, league: League, order: string[]): Promise
 
   const next = applyFinishingOrder(archive.value, order);
   if (!next.ok) return fail({ kind: 'invalid-order' });
-  const written = await db.batch([{ type: 'put', collection: SEASON_ARCHIVE_COLLECTION, id: season.id, value: next.value }]);
+  // Free agency picks follow the finishing order, in this league's plan and in the plans of leagues that took teams from this season.
+  const plans = await db.list<unknown>(OFFSEASON_PLAN_COLLECTION);
+  if (!plans.ok) return storage(plans.error);
+  const pickOps: Op[] = [];
+  for (const { id, value } of plans.value) {
+    if (!isOffseasonPlan(value) || value.seasonId !== id) return storage(new Error(`Saved offseason plan ${id} could not be read`));
+    const affected = value.seasonId === season.id || (value.arrivals ?? []).some((a) => a.sourceSeasonId === season.id);
+    if (!affected || value.freeAgentPicks === undefined) continue;
+    const { freeAgentPicks: _picks, ...rest } = value;
+    pickOps.push({ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id, value: rest });
+  }
+  const written = await db.batch([{ type: 'put', collection: SEASON_ARCHIVE_COLLECTION, id: season.id, value: next.value }, ...pickOps]);
   return written.ok ? { ok: true, value: next.value } : storage(written.error);
 }
 

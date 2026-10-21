@@ -3,11 +3,13 @@ import { generateLeagueRosters } from '@/rosters/roster-repository';
 import type { StandardRosterPlayer } from '@/rosters/roster';
 import { rngFromDice } from '@/rules/test-rng';
 import { acceptLeague } from '@/seasons/accept-league';
+import { unlinkLeagues } from '@/leagues/league-link-repository';
 import { finishSeason, getSeasonArchive } from '@/seasons/season-archive-repository';
 import { createMemoryDatabase } from '@/storage/memory-database';
 import type { Database } from '@/storage/types';
 import { createFranchise, listFranchises } from '@/teams/franchise-repository';
 import { OFFSEASON_PLAN_COLLECTION } from './offseason-plan';
+import { arrivalsReady } from './roster-changes';
 import { blockedText, getArrivalStatus, getOffseasonPlan, planErrorText, saveOffseasonPlan, stageArrivals } from './offseason-plan-repository';
 
 const make = (id: string, extra: Partial<League> = {}): League => ({
@@ -221,5 +223,40 @@ describe('getArrivalStatus', () => {
     await stageArrivals(db, solo);
     const status = await getArrivalStatus(db, solo);
     expect(status.ok && [status.value.expected, status.value.staged, status.value.current]).toEqual([[], [], true]);
+  });
+});
+
+describe('stale arrivals after the link is removed', () => {
+  it('can be cleared by restaging, which also drops protections and picks', async () => {
+    const { db, u, l, uIds, lIds } = await pair();
+    await saveOffseasonPlan(db, u, [uIds[0]], [uIds[5]]);
+    await saveOffseasonPlan(db, l, [lIds[0]], [lIds[5]]);
+    expect((await stageArrivals(db, l, dice())).ok).toBe(true);
+    const planBefore = await getOffseasonPlan(db, 's-L');
+    if (!planBefore.ok || planBefore.value === null) throw new Error('plan');
+    await db.batch([
+      {
+        type: 'put',
+        collection: OFFSEASON_PLAN_COLLECTION,
+        id: 's-L',
+        value: { ...planBefore.value, teamChanges: [{ franchiseId: lIds[1], protectedId: 'p' }], freeAgentPicks: [{ franchiseId: lIds[1], playerId: 'q' }] },
+      },
+    ]);
+
+    expect((await unlinkLeagues(db, 'U', 'L')).ok).toBe(true);
+    const stuck = await getArrivalStatus(db, l);
+    if (!stuck.ok) throw new Error('status');
+    expect(stuck.value.expected).toEqual([]);
+    expect(stuck.value.staged).toHaveLength(1);
+    expect(arrivalsReady(stuck.value)).toBe(false);
+
+    expect((await stageArrivals(db, l, dice())).ok).toBe(true);
+    const cleared = await getArrivalStatus(db, l);
+    if (!cleared.ok) throw new Error('status');
+    expect(cleared.value.staged).toEqual([]);
+    expect(arrivalsReady(cleared.value)).toBe(true);
+    const plan = await getOffseasonPlan(db, 's-L');
+    expect(plan.ok && plan.value?.teamChanges).toBeUndefined();
+    expect(plan.ok && plan.value?.freeAgentPicks).toBeUndefined();
   });
 });

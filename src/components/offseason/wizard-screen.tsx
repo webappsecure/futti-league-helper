@@ -140,7 +140,7 @@ function WizardStepScreen({ league, season, step }: { league: League; season: Se
       onExit={exit}>
       {step === 'order' && <OrderStep league={league} archive={data.archive} refresh={refresh} />}
       {step === 'departures' && <DeparturesStep league={league} season={season} archive={data.archive} plan={data.plan} refresh={refresh} />}
-      {step === 'arrivals' && <ArrivalsStep league={league} hasPlan={data.plan !== null} arrivals={arrivals} />}
+      {step === 'arrivals' && <ArrivalsStep league={league} hasPlan={data.plan !== null} arrivals={arrivals} refresh={refresh} />}
       {step === 'new-teams' && <NewTeamsSection league={league} plan={data.plan} arrivals={arrivals} refresh={refresh} />}
       {step === 'protection' && data.plan !== null && status !== null && (
         <ProtectionStep league={league} plan={data.plan} teams={data.teams} arrivals={status} nameOf={nameOf} refresh={refresh} />

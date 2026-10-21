@@ -35,7 +35,8 @@ const status = (done: boolean): StepStatus => (done ? 'complete' : 'incomplete')
 
 export function stepStatuses({ plan, teams, arrivals }: WizardInput): StepStatuses {
   const changes = plan?.teamChanges ?? [];
-  const protectedAll = teams.length > 0 && teams.every((t) => changes.some((c) => c.franchiseId === t.franchiseId));
+  // With a saved plan and no team taking part (everyone left and nobody arrived) there is nothing to protect, age or draft.
+  const protectedAll = plan !== null && teams.every((t) => changes.some((c) => c.franchiseId === t.franchiseId));
   const aged = protectedAll && teams.every((t) => changes.some((c) => c.franchiseId === t.franchiseId && c.retiredId !== undefined));
   return {
     order: 'complete',

@@ -53,8 +53,13 @@ describe('stepStatuses', () => {
     expect(stepStatuses(input(allPicks))['free-agency']).toBe('complete');
     expect(stepStatuses(input(plan({ freeAgentPicks: allPicks.freeAgentPicks })))['free-agency']).toBe('incomplete');
   });
-  it('is incomplete when no teams take part', () => {
-    expect(stepStatuses(input(plan(), quiet, [])).protection).toBe('incomplete');
+  it('completes the team steps when a plan is saved and no team takes part', () => {
+    const s = stepStatuses(input(plan(), quiet, []));
+    expect([s.protection, s.aging, s['free-agency']]).toEqual(['complete', 'complete', 'complete']);
+  });
+  it('keeps the team steps incomplete without a plan', () => {
+    const s = stepStatuses(input(null, quiet, []));
+    expect([s.protection, s.aging, s['free-agency']]).toEqual(['incomplete', 'incomplete', 'incomplete']);
   });
 });
 
