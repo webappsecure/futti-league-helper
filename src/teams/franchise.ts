@@ -65,8 +65,17 @@ function textError(value: string, label: string): string | undefined {
   return undefined;
 }
 
-export function validateFranchiseInput(input: FranchiseInput): FranchiseValidation {
-  const fields: FranchiseFieldErrors = {};
+export type IdentityFieldErrors = Partial<Record<'city' | 'name' | 'primaryColor' | 'secondaryColor', string>>;
+
+export type IdentityValidation =
+  | { ok: true; value: Omit<FranchiseIdentity, 'fromSeason'> }
+  | { ok: false; fields: IdentityFieldErrors };
+
+/** Checks and cleans a team's city, name and colors: trimmed text and lowercase `#rrggbb`. */
+export function validateIdentityInput(
+  input: Pick<FranchiseInput, 'city' | 'name' | 'primaryColor' | 'secondaryColor'>,
+): IdentityValidation {
+  const fields: IdentityFieldErrors = {};
   const cityError = textError(input.city, 'city');
   if (cityError) fields.city = cityError;
   const nameError = textError(input.name, 'team name');
@@ -77,22 +86,29 @@ export function validateFranchiseInput(input: FranchiseInput): FranchiseValidati
   const secondary = normalizeHexColor(input.secondaryColor);
   if (secondary === null) fields.secondaryColor = 'Choose a color or enter a hex value like #3c87f7.';
 
-  const grade = GRADES.find((g) => g === input.initialGrade);
-  if (grade === undefined) fields.initialGrade = 'Choose an initial grade.';
-
   if (Object.keys(fields).length > 0) return { ok: false, fields };
   return {
     ok: true,
     value: {
-      initialGrade: grade as Grade,
-      identity: {
-        fromSeason: 1,
-        city: input.city.trim(),
-        name: input.name.trim(),
-        primaryColor: primary as string,
-        secondaryColor: secondary as string,
-      },
+      city: input.city.trim(),
+      name: input.name.trim(),
+      primaryColor: primary as string,
+      secondaryColor: secondary as string,
     },
+  };
+}
+
+export function validateFranchiseInput(input: FranchiseInput): FranchiseValidation {
+  const identity = validateIdentityInput(input);
+  const fields: FranchiseFieldErrors = identity.ok ? {} : { ...identity.fields };
+
+  const grade = GRADES.find((g) => g === input.initialGrade);
+  if (grade === undefined) fields.initialGrade = 'Choose an initial grade.';
+
+  if (Object.keys(fields).length > 0 || !identity.ok) return { ok: false, fields };
+  return {
+    ok: true,
+    value: { initialGrade: grade as Grade, identity: { fromSeason: 1, ...identity.value } },
   };
 }
 

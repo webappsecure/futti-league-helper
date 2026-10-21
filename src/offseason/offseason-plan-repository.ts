@@ -1,11 +1,20 @@
 import type { League } from '@/leagues/league';
-import { leagueAbove, leagueBelow } from '@/leagues/league-links';
+import { createId } from '@/leagues/ids';
+import { chainLeagueIds, leagueAbove, leagueBelow } from '@/leagues/league-links';
 import { listLeagues } from '@/leagues/league-repository';
+import { NAME_POOL } from '@/names/name-pool';
+import { getBurnedNames } from '@/names/name-registry';
+import { namePicker } from '@/rosters/roster-repository';
+import { NamesExhaustedError } from '@/rosters/roster';
 import type { Rng } from '@/rules/dice';
 import { acceptQueue } from '@/seasons/accept-queue';
+import type { Season } from '@/seasons/season';
 import { getSeasonArchive } from '@/seasons/season-archive-repository';
+import { FRANCHISE_COLLECTION } from '@/teams/franchise-repository';
+import { identityForSeason, isFranchise, validateIdentityInput, type IdentityFieldErrors } from '@/teams/franchise';
 import { getLeagueSeason } from '@/seasons/season-repository';
 import { fail as failResult, ok, type Database, type Result } from '@/storage/types';
+import { buildNewTeam, openVacancies } from './new-teams';
 import { arrivalsAreCurrent, buildArrivals, expectedArrivals, type ArrivalSource, type ExpectedArrival } from './arrivals';
 import {
   departureErrorText,
@@ -15,6 +24,7 @@ import {
   type DepartureError,
   type OffseasonPlan,
   type StagedArrival,
+  type StagedNewTeam,
 } from './offseason-plan';
 
 export type BlockedReason = 'no-season' | 'not-offseason' | 'no-archive' | 'no-plan';
@@ -30,6 +40,10 @@ export interface BlockedNeighbor {
 export type PlanError =
   | { kind: DepartureError }
   | { kind: 'no-plan' }
+  | { kind: 'validation'; fields: IdentityFieldErrors }
+  | { kind: 'no-vacancy' }
+  | { kind: 'not-found' }
+  | { kind: 'no-names' }
   | { kind: 'blocked'; blocked: BlockedNeighbor[] }
   | { kind: 'missing-team'; franchiseId: string }
   | { kind: 'no-season' }
@@ -73,6 +87,7 @@ async function saveNow(db: Database, league: League, promoted: string[], demoted
   if (!existing.ok) return storage(existing.error);
   const plan: OffseasonPlan = {
     ...(existing.value?.arrivals ? { arrivals: existing.value.arrivals } : {}),
+    ...(existing.value?.newTeams ? { newTeams: existing.value.newTeams } : {}),
     seasonId: season.id,
     leagueId: league.id,
     promoted: [...promoted],
@@ -85,7 +100,10 @@ async function saveNow(db: Database, league: League, promoted: string[], demoted
 type Loaded<T> = { ok: true; value: T } | { ok: false; error: Error };
 
 /** The linked leagues next to `league`, each with its season results and plan, and the ones that cannot send teams yet. */
-async function loadSources(db: Database, league: League): Promise<Loaded<{ sources: ArrivalSource[]; blocked: BlockedNeighbor[] }>> {
+async function loadSources(
+  db: Database,
+  league: League,
+): Promise<Loaded<{ sources: ArrivalSource[]; blocked: BlockedNeighbor[]; hasAbove: boolean; hasBelow: boolean }>> {
   const all = await listLeagues(db);
   if (!all.ok) return { ok: false, error: all.error.kind === 'storage' ? all.error.error : new Error('Could not read leagues') };
   if (all.value.unreadable > 0) return { ok: false, error: new Error('A saved league could not be read') };
@@ -120,10 +138,13 @@ async function loadSources(db: Database, league: League): Promise<Loaded<{ sourc
     if (plan.value === null) block('no-plan');
     sources.push({ league: other, direction, archive: archive.value, plan: plan.value });
   }
-  return { ok: true, value: { sources, blocked } };
+  return { ok: true, value: { sources, blocked, hasAbove: neighbors[0].league !== null, hasBelow: neighbors[1].league !== null } };
 }
 
 export interface ArrivalStatus {
+  /** Whether a linked league sits above or below this one. */
+  hasAbove: boolean;
+  hasBelow: boolean;
   sources: ArrivalSource[];
   blocked: BlockedNeighbor[];
   expected: ExpectedArrival[];
@@ -177,6 +198,153 @@ async function stageNow(db: Database, league: League, rng: Rng): Promise<PlanRes
   return written.ok ? { ok: true, value: plan } : storage(written.error);
 }
 
+export interface NewTeamOptions {
+  rng?: Rng;
+  newId?: () => string;
+  pool?: readonly string[];
+}
+
+export type NewTeamInput = Pick<StagedNewTeam, 'city' | 'name' | 'primaryColor' | 'secondaryColor'>;
+
+const DUPLICATE_NAME = 'A team with this name already exists in this league or a linked league.';
+
+const norm = (name: string) => name.trim().toLowerCase();
+
+/** Every staged new team in every offseason plan, with the plan's league, or a read failure. Fails closed on an unreadable plan. */
+async function listStagedNewTeams(db: Database): Promise<Loaded<{ leagueId: string; team: StagedNewTeam }[]>> {
+  const stored = await db.list<unknown>(OFFSEASON_PLAN_COLLECTION);
+  if (!stored.ok) return { ok: false, error: stored.error };
+  const out: { leagueId: string; team: StagedNewTeam }[] = [];
+  for (const { id, value } of stored.value) {
+    if (!isOffseasonPlan(value) || value.seasonId !== id) return { ok: false, error: new Error(`Saved offseason plan ${id} could not be read`) };
+    for (const team of value.newTeams ?? []) out.push({ leagueId: value.leagueId, team });
+  }
+  return { ok: true, value: out };
+}
+
+interface NewTeamContext {
+  ok: true;
+  season: Season;
+  plan: OffseasonPlan;
+  links: { hasAbove: boolean; hasBelow: boolean };
+  chain: string[];
+  staged: { leagueId: string; team: StagedNewTeam }[];
+}
+
+/** The pieces every new-team edit needs: the offseason season, this league's plan, and what its links leave open. */
+type PlanFailure = { ok: false; error: PlanError };
+
+async function loadForNewTeams(db: Database, league: League): Promise<PlanFailure | NewTeamContext> {
+  const fail = (error: PlanError): PlanFailure => ({ ok: false, error });
+  const storage = (error: Error): PlanFailure => fail({ kind: 'storage', error });
+  const found = await getLeagueSeason(db, league.id);
+  if (!found.ok) return storage(found.error);
+  const season = found.value;
+  if (season === null) return fail({ kind: 'no-season' });
+  if (season.status !== 'offseason') return fail({ kind: 'not-offseason' });
+  const own = await getOffseasonPlan(db, season.id);
+  if (!own.ok) return storage(own.error);
+  if (own.value === null) return fail({ kind: 'no-plan' });
+  const all = await listLeagues(db);
+  if (!all.ok) return storage(all.error.kind === 'storage' ? all.error.error : new Error('Could not read leagues'));
+  if (all.value.unreadable > 0) return storage(new Error('A saved league could not be read'));
+  const current = all.value.leagues.find((l) => l.id === league.id) ?? league;
+  const links = { hasAbove: leagueAbove(current, all.value.leagues) !== null, hasBelow: leagueBelow(current, all.value.leagues) !== null };
+  const staged = await listStagedNewTeams(db);
+  if (!staged.ok) return storage(staged.error);
+  return { ok: true, season, plan: own.value, links, chain: chainLeagueIds(current, all.value.leagues), staged: staged.value };
+}
+
+/** Names a new roster may not use: burned, or already on another staged new team. */
+async function unavailablePlayerNames(db: Database, staged: { team: StagedNewTeam }[], except?: string) {
+  const burned = await getBurnedNames(db);
+  if (!burned.ok) return burned;
+  const names = new Set(burned.value);
+  for (const { team } of staged) if (team.id !== except) for (const p of team.players) names.add(p.name);
+  return ok(names);
+}
+
+async function writeNewTeams(db: Database, plan: OffseasonPlan, newTeams: StagedNewTeam[]): Promise<PlanResult> {
+  const next: OffseasonPlan = { ...plan, newTeams };
+  const written = await db.batch([{ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: plan.seasonId, value: next }]);
+  return written.ok ? { ok: true, value: next } : storage(written.error);
+}
+
+/** Runs a team build, turning name-pool exhaustion into `no-names`; anything else is unexpected and propagates. */
+function buildOrNoNames(make: () => StagedNewTeam): { ok: true; team: StagedNewTeam } | { ok: false; error: PlanError } {
+  try {
+    return { ok: true, team: make() };
+  } catch (e) {
+    if (e instanceof NamesExhaustedError) return { ok: false, error: { kind: 'no-names' } };
+    throw e;
+  }
+}
+
+/** Stages a newly created team for a place the links leave open: rolls its grade and generates its roster. */
+export const addNewTeam = (db: Database, league: League, input: NewTeamInput, vacancy: StagedNewTeam['vacancy'], options: NewTeamOptions = {}) =>
+  acceptQueue(() => addNow(db, league, input, vacancy, options));
+
+async function addNow(db: Database, league: League, input: NewTeamInput, vacancy: StagedNewTeam['vacancy'], options: NewTeamOptions): Promise<PlanResult> {
+  const { rng = Math.random, newId = createId, pool = NAME_POOL } = options;
+  const loaded = await loadForNewTeams(db, league);
+  if (!loaded.ok) return loaded;
+  const checked = validateIdentityInput(input);
+  if (!checked.ok) return fail({ kind: 'validation', fields: checked.fields });
+  if (openVacancies(loaded.plan, loaded.links)[vacancy] <= 0) return fail({ kind: 'no-vacancy' });
+
+  const franchises = await db.list<unknown>(FRANCHISE_COLLECTION);
+  if (!franchises.ok) return storage(franchises.error);
+  const wanted = norm(checked.value.name);
+  const usedByTeam = franchises.value.some(({ value }) => {
+    if (!isFranchise(value) || !loaded.chain.includes(value.leagueId)) return false;
+    const identity = identityForSeason(value, loaded.season.index) ?? value.identities[0];
+    return norm(identity.name) === wanted;
+  });
+  const usedByStaged = loaded.staged.some(({ leagueId, team }) => loaded.chain.includes(leagueId) && norm(team.name) === wanted);
+  if (usedByTeam || usedByStaged) return fail({ kind: 'validation', fields: { name: DUPLICATE_NAME } });
+
+  const unavailable = await unavailablePlayerNames(db, loaded.staged);
+  if (!unavailable.ok) return storage(unavailable.error);
+  const pickName = namePicker(unavailable.value, rng, pool);
+  const made = buildOrNoNames(() => buildNewTeam({ id: newId(), vacancy, identity: checked.value, leagueId: league.id, rng, pickName }));
+  if (!made.ok) return fail(made.error);
+  return writeNewTeams(db, loaded.plan, [...(loaded.plan.newTeams ?? []), made.team]);
+}
+
+/** Redoes the grade roll and roster of a staged new team; its id, side and identity stay. */
+export const rerollNewTeam = (db: Database, league: League, teamId: string, options: NewTeamOptions = {}) =>
+  acceptQueue(() => rerollNow(db, league, teamId, options));
+
+async function rerollNow(db: Database, league: League, teamId: string, options: NewTeamOptions): Promise<PlanResult> {
+  const { rng = Math.random, pool = NAME_POOL } = options;
+  const loaded = await loadForNewTeams(db, league);
+  if (!loaded.ok) return loaded;
+  const teams = loaded.plan.newTeams ?? [];
+  const index = teams.findIndex((t) => t.id === teamId);
+  if (index < 0) return fail({ kind: 'not-found' });
+  const unavailable = await unavailablePlayerNames(db, loaded.staged, teamId);
+  if (!unavailable.ok) return storage(unavailable.error);
+  const pickName = namePicker(unavailable.value, rng, pool);
+  const old = teams[index];
+  const { city, name, primaryColor, secondaryColor } = old;
+  const made = buildOrNoNames(() =>
+    buildNewTeam({ id: old.id, vacancy: old.vacancy, identity: { city, name, primaryColor, secondaryColor }, leagueId: league.id, rng, pickName }),
+  );
+  if (!made.ok) return fail(made.error);
+  return writeNewTeams(db, loaded.plan, teams.map((t, i) => (i === index ? made.team : t)));
+}
+
+/** Removes a staged new team, freeing its place. */
+export const removeNewTeam = (db: Database, league: League, teamId: string) => acceptQueue(() => removeNow(db, league, teamId));
+
+async function removeNow(db: Database, league: League, teamId: string): Promise<PlanResult> {
+  const loaded = await loadForNewTeams(db, league);
+  if (!loaded.ok) return loaded;
+  const teams = loaded.plan.newTeams ?? [];
+  if (!teams.some((t) => t.id === teamId)) return fail({ kind: 'not-found' });
+  return writeNewTeams(db, loaded.plan, teams.filter((t) => t.id !== teamId));
+}
+
 export function blockedText(blocked: BlockedNeighbor): string {
   const where = blocked.direction === 'above' ? 'above' : 'below';
   switch (blocked.reason) {
@@ -195,6 +363,14 @@ export function planErrorText(error: PlanError, league: League): string {
   switch (error.kind) {
     case 'no-plan':
       return 'Save this league\'s plan first.';
+    case 'validation':
+      return Object.values(error.fields).join(' ');
+    case 'no-vacancy':
+      return 'There is no open place for a new team on that side.';
+    case 'not-found':
+      return 'That new team no longer exists.';
+    case 'no-names':
+      return 'No unused last names are left.';
     case 'blocked':
       return error.blocked.map(blockedText).join(' ');
     case 'missing-team':

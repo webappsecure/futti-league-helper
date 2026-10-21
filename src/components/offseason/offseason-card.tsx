@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
 import { ArrivalsSection } from '@/components/offseason/arrivals-section';
+import { NewTeamsSection } from '@/components/offseason/new-teams-section';
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -62,6 +63,7 @@ export function OffseasonCard({ league, season, archiveVersion }: OffseasonCardP
         <>
           <PlanEditor key={archive.state.archive.teams.map((t) => t.franchiseId).join(',')} league={league} season={season} archive={archive.state.archive} saved={plan.state.plan} refresh={refreshPlan} />
           <ArrivalsSection league={league} hasPlan={plan.state.plan !== null} arrivals={arrivals} />
+          <NewTeamsSection league={league} plan={plan.state.plan} arrivals={arrivals} refresh={refreshPlan} />
         </>
       )}
     </ThemedView>

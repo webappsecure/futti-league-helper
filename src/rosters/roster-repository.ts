@@ -85,7 +85,7 @@ async function unavailableNames(
 }
 
 /** A name picker that reserves each name it hands out, so one batch never repeats a name. */
-function namePicker(unavailable: Set<string>, rng: Rng, pool: readonly string[]): PickName {
+export function namePicker(unavailable: Set<string>, rng: Rng, pool: readonly string[]): PickName {
   return () => {
     const name = pickRandomName(pool, unavailable, rng);
     if (name === null) throw new NamesExhaustedError();

@@ -5,6 +5,7 @@ import {
   isFranchise,
   normalizeHexColor,
   validateFranchiseInput,
+  validateIdentityInput,
   type Franchise,
   type FranchiseInput,
 } from './franchise';
@@ -118,4 +119,23 @@ describe('isFranchise', () => {
     { ...team('1', 'A'), identities: [{ fromSeason: 1, city: 'x', name: 'y', primaryColor: 'red', secondaryColor: '#ffffff' }] },
     { ...team('1', 'A'), identities: [{ fromSeason: 0, city: 'x', name: 'y', primaryColor: '#ffffff', secondaryColor: '#ffffff' }] },
   ])('rejects malformed %#', (value) => expect(isFranchise(value)).toBe(false));
+});
+
+describe('validateIdentityInput', () => {
+  const good = { city: ' Richmond ', name: ' Greyhounds ', primaryColor: '#ABC', secondaryColor: '3C87F7' };
+  it('trims text and normalizes colors', () => {
+    expect(validateIdentityInput(good)).toEqual({
+      ok: true,
+      value: { city: 'Richmond', name: 'Greyhounds', primaryColor: '#aabbcc', secondaryColor: '#3c87f7' },
+    });
+  });
+  it('reports every field problem', () => {
+    const r = validateIdentityInput({ city: ' ', name: 'x'.repeat(61), primaryColor: 'red', secondaryColor: '' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(Object.keys(r.fields).sort()).toEqual(['city', 'name', 'primaryColor', 'secondaryColor']);
+  });
+  it('has no grade field', () => {
+    const r = validateIdentityInput({ ...good, city: '' });
+    expect(r.ok === false && 'initialGrade' in r.fields).toBe(false);
+  });
 });

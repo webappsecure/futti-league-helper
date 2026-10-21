@@ -1,6 +1,9 @@
 import type { League } from '@/leagues/league';
 import { isRoster, type RosterPlayer } from '@/rosters/roster';
+import type { Grade } from '@/rules/charts';
 import type { SeasonArchive } from '@/seasons/season-archive';
+import { validateIdentityInput } from '@/teams/franchise';
+import { replacementGrade } from './rating-adjust';
 
 export const OFFSEASON_PLAN_COLLECTION = 'offseason-plans';
 
@@ -15,13 +18,30 @@ export interface StagedArrival {
   players: RosterPlayer[];
 }
 
-/** The teams leaving the league this offseason, by franchise id, and the teams staged to arrive. One document per season; its id is the season id. */
+/** A newly created team staged to fill a place the linked leagues do not fill. Live data is unchanged until the offseason is approved. */
+export interface StagedNewTeam {
+  /** The franchise id the team will get when the offseason is applied. */
+  id: string;
+  /** The movement of the departing team whose place it fills; it decides the grade roll. */
+  vacancy: 'promoted' | 'demoted';
+  /** The d6 that chose `grade`. */
+  gradeRoll: number;
+  grade: Grade;
+  city: string;
+  name: string;
+  primaryColor: string;
+  secondaryColor: string;
+  players: RosterPlayer[];
+}
+
+/** The teams leaving the league this offseason, by franchise id, and the teams staged to arrive or to be created. One document per season; its id is the season id. */
 export interface OffseasonPlan {
   seasonId: string;
   leagueId: string;
   promoted: string[];
   demoted: string[];
   arrivals?: StagedArrival[];
+  newTeams?: StagedNewTeam[];
 }
 
 export type DepartureError =
@@ -95,6 +115,26 @@ function isStagedArrival(value: unknown): value is StagedArrival {
   );
 }
 
+function isStagedNewTeam(value: unknown, leagueId: string): value is StagedNewTeam {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.id !== 'string' || v.id.length === 0) return false;
+  if (v.vacancy !== 'promoted' && v.vacancy !== 'demoted') return false;
+  if (typeof v.gradeRoll !== 'number' || !Number.isInteger(v.gradeRoll) || v.gradeRoll < 1 || v.gradeRoll > 6) return false;
+  if (v.grade !== replacementGrade(v.vacancy, v.gradeRoll)) return false;
+  if (typeof v.city !== 'string' || typeof v.name !== 'string' || typeof v.primaryColor !== 'string' || typeof v.secondaryColor !== 'string') return false;
+  const identity = validateIdentityInput({
+    city: v.city,
+    name: v.name,
+    primaryColor: v.primaryColor,
+    secondaryColor: v.secondaryColor,
+  });
+  if (!identity.ok) return false;
+  const clean = identity.value;
+  if (clean.city !== v.city || clean.name !== v.name || clean.primaryColor !== v.primaryColor || clean.secondaryColor !== v.secondaryColor) return false;
+  return isRoster({ franchiseId: v.id, leagueId, players: v.players });
+}
+
 export function isOffseasonPlan(value: unknown): value is OffseasonPlan {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -103,7 +143,17 @@ export function isOffseasonPlan(value: unknown): value is OffseasonPlan {
   if (!isIdList(v.promoted) || !isIdList(v.demoted)) return false;
   const all = [...v.promoted, ...v.demoted];
   if (new Set(all).size !== all.length) return false;
-  if (v.arrivals === undefined) return true;
-  if (!Array.isArray(v.arrivals) || !v.arrivals.every(isStagedArrival)) return false;
-  return new Set(v.arrivals.map((a: StagedArrival) => a.franchiseId)).size === v.arrivals.length;
+  let arrivalIds: string[] = [];
+  if (v.arrivals !== undefined) {
+    if (!Array.isArray(v.arrivals) || !v.arrivals.every(isStagedArrival)) return false;
+    arrivalIds = v.arrivals.map((a: StagedArrival) => a.franchiseId);
+    if (new Set(arrivalIds).size !== arrivalIds.length) return false;
+  }
+  if (v.newTeams !== undefined) {
+    const leagueId = v.leagueId;
+    if (!Array.isArray(v.newTeams) || !v.newTeams.every((t) => isStagedNewTeam(t, leagueId))) return false;
+    const ids = v.newTeams.map((t: StagedNewTeam) => t.id);
+    if (new Set([...ids, ...arrivalIds]).size !== ids.length + arrivalIds.length) return false;
+  }
+  return true;
 }
