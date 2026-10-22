@@ -50,7 +50,7 @@ async function listChainTeams(
   const ids = chainLeagueIds(current, known);
   const stored = await db.list<unknown>(FRANCHISE_COLLECTION);
   if (!stored.ok) return storage(stored.error);
-  const teams = stored.value.map((doc) => doc.value).filter(isFranchise).filter((t) => ids.includes(t.leagueId));
+  const teams = stored.value.map((doc) => doc.value).filter(isFranchise).filter((t) => t.leagueId !== undefined && ids.includes(t.leagueId));
   return done({ teams, linked: ids.length > 1 });
 }
 

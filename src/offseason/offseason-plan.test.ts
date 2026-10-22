@@ -42,8 +42,9 @@ describe('validateDepartures', () => {
   it('accepts a valid choice', () => {
     expect(check(league(2, 1), ['c', 'a'], ['d'])).toEqual({ ok: true });
   });
-  it('rejects a league without relegation', () => {
-    expect(check(league(0, 0, false), [], [])).toEqual({ ok: false, error: 'not-relegation' });
+  it('accepts no departures for a league without relegation and rejects any departure', () => {
+    expect(check(league(0, 0, false), [], [])).toEqual({ ok: true });
+    expect(check(league(0, 0, false), ['a'], [])).toEqual({ ok: false, error: 'promoted-count' });
   });
   it('rejects wrong counts', () => {
     expect(check(league(2, 1), ['a'], ['f'])).toEqual({ ok: false, error: 'promoted-count' });
@@ -62,7 +63,7 @@ describe('validateDepartures', () => {
     expect(r).toEqual({ ok: false, error: 'too-few-teams' });
   });
   it('has text for every error', () => {
-    for (const e of ['not-relegation', 'promoted-count', 'demoted-count', 'unknown-team', 'overlap', 'too-few-teams'] as const) {
+    for (const e of ['promoted-count', 'demoted-count', 'unknown-team', 'overlap', 'too-few-teams'] as const) {
       expect(departureErrorText(e, league(1, 2)).length).toBeGreaterThan(0);
     }
   });

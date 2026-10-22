@@ -1,7 +1,7 @@
 import { LEAGUE_COLLECTION, type League } from '@/leagues/league';
 import { burnNames } from '@/names/name-registry';
 import { generateLeagueRosters } from '@/rosters/roster-repository';
-import { isRoster, ROSTER_COLLECTION } from '@/rosters/roster';
+import { generateDraftStandard, isRoster, ROSTER_COLLECTION } from '@/rosters/roster';
 import { acceptLeague } from '@/seasons/accept-league';
 import { finishSeason } from '@/seasons/season-archive-repository';
 import { createMemoryDatabase } from '@/storage/memory-database';
@@ -9,7 +9,10 @@ import type { Database } from '@/storage/types';
 import { createFranchise, FRANCHISE_COLLECTION, listFranchises } from '@/teams/franchise-repository';
 import { getOffseasonPlan, planErrorText, saveOffseasonPlan, stageArrivals } from './offseason-plan-repository';
 import { ageAndRelease, load, makeFreeAgentPick, setProtection, undoFreeAgentPick } from './roster-changes-repository';
-import { generateDraftPool, makeRookiePick, undoRookiePick } from './rookie-draft-repository';
+import { generateDraftPool, makeRookiePick, undoRookiePick, unavailableNames } from './rookie-draft-repository';
+import { OFFSEASON_PLAN_COLLECTION } from './offseason-plan';
+import { SEASON_COLLECTION } from '@/seasons/season';
+import { rngFromDice } from '@/rules/test-rng';
 import { rookieDraftOrder, rookieOnTheClock, rookiePool, teamNeeds } from './rookie-draft';
 
 const make = (id: string, extra: Partial<League> = {}): League => ({
@@ -305,5 +308,23 @@ describe('clearing the draft', () => {
     await undoFreeAgentPick(db, l);
     await makeFreeAgentPick(db, l, (await planOf(db, 's-S')).teamChanges![0].releasedId!);
     await cleared(db, 's-S');
+  });
+});
+
+describe('names reserved by plans', () => {
+  it('only plans of seasons still in the offseason reserve their names', async () => {
+    const db = createMemoryDatabase();
+    const draftee = (id: string, name: string) => generateDraftStandard(rngFromDice(1, 1, 6, 6, 3, 1, 1, 1, 1), () => name, () => id);
+    const plan = (seasonId: string, name: string) => ({ seasonId, leagueId: 'L', promoted: [], demoted: [], draftPool: [draftee(`p-${seasonId}`, name)] });
+    await db.batch([
+      { type: 'put', collection: SEASON_COLLECTION, id: 'old', value: { id: 'old', leagueId: 'L', index: 1, status: 'archived' } },
+      { type: 'put', collection: SEASON_COLLECTION, id: 'now', value: { id: 'now', leagueId: 'L', index: 2, status: 'offseason' } },
+      { type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: 'old', value: plan('old', 'OLDNAME') },
+      { type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: 'now', value: plan('now', 'NEWNAME') },
+    ]);
+    const r = await unavailableNames(db, 'other', []);
+    if (!r.ok) throw r.error;
+    expect(r.names.has('NEWNAME')).toBe(true);
+    expect(r.names.has('OLDNAME')).toBe(false);
   });
 });

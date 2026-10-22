@@ -47,7 +47,7 @@ export async function linkLeagues(db: Database, upperId: string, lowerId: string
   const teams = stored.value.map((doc) => doc.value).filter(isFranchise);
   const teamsOf = (league: League): Franchise[] => {
     const ids = chainLeagueIds(league, leagues);
-    return teams.filter((t) => ids.includes(t.leagueId));
+    return teams.filter((t) => t.leagueId !== undefined && ids.includes(t.leagueId));
   };
   const upperTeams = teamsOf(upper);
   for (const team of teamsOf(lower)) {

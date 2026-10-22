@@ -7,8 +7,8 @@ import { namePicker } from '@/rosters/roster-repository';
 import type { Rng } from '@/rules/dice';
 import { acceptQueue } from '@/seasons/accept-queue';
 import type { Database } from '@/storage/types';
-import { isOffseasonPlan, OFFSEASON_PLAN_COLLECTION, stagedPlayerNames, type OffseasonPlan } from './offseason-plan';
-import type { PlanError, PlanResult } from './offseason-plan-repository';
+import { stagedPlayerNames, type OffseasonPlan } from './offseason-plan';
+import { listOffseasonPlans, type PlanError, type PlanResult } from './offseason-plan-repository';
 import { load, putClearingProgression } from './roster-changes-repository';
 import { freeAgencyComplete, poolSize, rookieDraftOrder, rookieOnTheClock, teamNeeds, validateRookiePick } from './rookie-draft';
 
@@ -32,13 +32,12 @@ export async function unavailableNames(db: Database, seasonId: string, omit: rea
   if (!burned.ok) return burned;
   const rosters = await db.list<unknown>(ROSTER_COLLECTION);
   if (!rosters.ok) return rosters;
-  const plans = await db.list<unknown>(OFFSEASON_PLAN_COLLECTION);
+  const plans = await listOffseasonPlans(db);
   if (!plans.ok) return plans;
   const names = new Set(burned.value);
   for (const { value } of rosters.value) if (isRoster(value)) for (const p of value.players) names.add(p.name);
-  for (const { id, value } of plans.value) {
-    if (!isOffseasonPlan(value) || value.seasonId !== id) return { ok: false, error: new Error(`Saved offseason plan ${id} could not be read`) };
-    const own = id === seasonId ? { ...value, ...Object.fromEntries(omit.map((field) => [field, undefined])) } : value;
+  for (const value of plans.value) {
+    const own = value.seasonId === seasonId ? { ...value, ...Object.fromEntries(omit.map((field) => [field, undefined])) } : value;
     for (const name of stagedPlayerNames(own)) names.add(name);
   }
   return { ok: true, names };

@@ -1,6 +1,6 @@
 # Fütti League and Game Tracker - Project Overview
 
-<!-- blueprint:source-hash 21d27bb01995cf3f89ba6e83fce35ae7f6b3220fce971fe52ab08bdcda01ddd4 -->
+<!-- blueprint:source-hash 80998bd7335f60e17ecb0e6b1b662f750a0059f734e2183347502f96827e8277 -->
 
 > A commissioner's tool (Expo / React Native, local-first) for creating and running leagues of the fictional futsal-style sport Fütti: dice-chart roster generation, a promotion and relegation offseason, and permanent franchise, player and season history. It never simulates matches.
 
@@ -21,7 +21,7 @@ One commissioner running one or more leagues, possibly for a small circle of fri
 
 ## Features
 
-Build order (details come per `/feature`); numbers are stable IDs, so 15 is built right after 9, 16 right after 15 and 17 right after 12a. Headline: the offseason (11-13).
+Build order (details come per `/feature`); numbers are stable IDs, so 15 is built right after 9, 16 right after 15 and 17 right after 12a and 18 right after 13. Headline: the offseason (11-13).
 
 1. **App shell and local storage** - navigation, master-detail layout, theme, native + web persistence, schema versioning, unit test runner.
 2. **Rating and dice engine** - pure, tested dice, chart, split, star and goaltending base-6 logic.
@@ -39,6 +39,7 @@ Build order (details come per `/feature`); numbers are stable IDs, so 15 is buil
 17. **Offseason wizard** - replaces the Offseason card with step-by-step screens (departures, arrivals, new teams, protection, aging and release), Back/Next, resumable from the saved plan.
 12b. **Offseason: free agency draft** - draft from the released pool, best finisher first.
 13. **Offseason: draft and progression** - draft pool, rookie draft, progression, approval.
+18. **Team control star limits** - each team's total control stars kept between 2 and 6 (add to the best position players, remove from the worst, max 2 each) when generated and again after progression; built after 13.
 14. **Franchise and player history** - franchise timeline with identity changes, retired players.
 9. **Export and import** - single file moves data between devices, merging name registries. Built last.
 
@@ -100,6 +101,7 @@ Later, not MVP (model must leave room): scheduling, scoring tabletop games, stan
 - SP by 2d6: 2-3=1, 4-5=2, 6-8=3, 9-10=4, 11-12=5.
 - Goaltending ratings run 31-36 then 41-46: +1 from 36 is 41, -1 from 41 is 36. Creation minimum 31, retire at 26, max 46.
 - Team names are unique within a league and across linked leagues; city names may repeat.
+- Team control stars total 2-6: below 2, add one star at a time to the best position players; above 6, remove one at a time from the worst with stars; a player holds 0-2. Checked at generation and after progression (feature 18).
 - Standard player OF+DE total max 8; promoted-team players cap OF/DE at 5 each, and if both rising would exceed 8 only the lower rises (4/3 becomes 4/4).
 - Retirement tie-break: goalie before position player; position players by lowest OF+DE, then SP, then random; goalies by lowest GO, then SP, then random. A goalie at or below 26 retires.
 - Chart tables are transcribed from `futti-program-specs.txt` at feature time and tested exactly.

@@ -7,7 +7,7 @@ import { createMemoryDatabase } from '@/storage/memory-database';
 import type { Database } from '@/storage/types';
 import { createFranchise, FRANCHISE_COLLECTION, listFranchises } from '@/teams/franchise-repository';
 import { addNewTeam, getOffseasonPlan, saveOffseasonPlan, stageArrivals } from './offseason-plan-repository';
-import { ageAndRelease, makeFreeAgentPick, setProtection, undoFreeAgentPick } from './roster-changes-repository';
+import { ageAndRelease, load, makeFreeAgentPick, setProtection, undoFreeAgentPick } from './roster-changes-repository';
 
 const make = (id: string, extra: Partial<League> = {}): League => ({
   id, name: `League ${id}`, size: 6, namingStyle: 'cityAndName', relegation: true, promotedCount: 1, demotedCount: 1, ...extra,
@@ -359,5 +359,22 @@ describe('editing the finishing order', () => {
     const before = await getSeasonArchive(db, 's-S');
     expect(await updateFinishingOrder(db, s, [...sIds].reverse())).toMatchObject({ ok: false, error: { kind: 'storage' } });
     expect(await getSeasonArchive(db, 's-S')).toEqual(before);
+  });
+});
+
+describe('a league without relegation', () => {
+  it('saves an empty plan and takes every team through protection and aging', async () => {
+    const db = createMemoryDatabase();
+    const l = make('N', { relegation: false, promotedCount: 0, demotedCount: 0 });
+    const ids = await build(db, l);
+    expect((await saveOffseasonPlan(db, l, [], [])).ok).toBe(true);
+    for (const id of ids) {
+      const loaded = await load(db, l);
+      if (!loaded.ok) throw new Error('load');
+      const team = loaded.teams.find((t) => t.franchiseId === id)!;
+      expect((await setProtection(db, l, id, team.players[0].id)).ok).toBe(true);
+    }
+    const aged = await ageAndRelease(db, l, { rng: () => 0 });
+    expect(aged.ok && aged.value.teamChanges?.length).toBe(ids.length);
   });
 });

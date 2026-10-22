@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -45,6 +46,12 @@ export function TeamsSection({ league, state, refresh, onRetry, season, refreshS
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const rosters = useRosters(league);
+  // An approved offseason replaces the rosters from the wizard screen, so read them again when this screen returns.
+  const reloadRosters = useRef(rosters.refresh);
+  useEffect(() => {
+    reloadRosters.current = rosters.refresh;
+  });
+  useFocusEffect(useCallback(() => void reloadRosters.current(), []));
   const [rosterBusy, setRosterBusy] = useState(false);
   const [rosterError, setRosterError] = useState<string | null>(null);
   const [confirmingReroll, setConfirmingReroll] = useState(false);

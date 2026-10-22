@@ -228,7 +228,10 @@ describe('another league\'s replacement names', () => {
     await generateDraftPool(db, l, { pool: names });
     const pool = (await planOf(db, 's-S')).draftPool!;
     other.progression = pool.map((p, i) => ({ franchiseId: 'x', playerId: `x${i}`, roll: 1, replacement: p }));
-    await db.batch([{ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: 's-X', value: other }]);
+    await db.batch([
+      { type: 'put', collection: 'seasons', id: 's-X', value: { id: 's-X', leagueId: 'X', index: 1, status: 'offseason' } },
+      { type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: 's-X', value: other },
+    ]);
     await db.batch([{ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: 's-S', value: { ...(await planOf(db, 's-S')), draftPool: undefined } }]);
     expect(await generateDraftPool(db, l, { pool: pool.map((p) => p.name) })).toMatchObject({ ok: false, error: { kind: 'no-names' } });
   });

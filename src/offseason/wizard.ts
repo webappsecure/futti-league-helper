@@ -3,7 +3,7 @@ import type { ArrivalStatus } from './offseason-plan-repository';
 import { draftIsComplete, freeAgencyComplete } from './rookie-draft';
 import { arrivalsReady, type ParticipatingTeam } from './roster-changes';
 
-export const WIZARD_STEPS = ['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging', 'free-agency', 'rookie-draft', 'progression'] as const;
+export const WIZARD_STEPS = ['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging', 'free-agency', 'rookie-draft', 'progression', 'approval'] as const;
 export type WizardStep = (typeof WIZARD_STEPS)[number];
 
 export const STEP_INFO: Record<WizardStep, { title: string; instruction: string }> = {
@@ -16,6 +16,7 @@ export const STEP_INFO: Record<WizardStep, { title: string; instruction: string 
   'free-agency': { title: 'Free agency draft', instruction: 'Each team picks one released player, in draft order. The team on the clock is shown.' },
   'rookie-draft': { title: 'Rookie draft', instruction: 'Generate the draft pool, then pick for each team that still needs players, worst finisher first. The team on the clock is shown.' },
   progression: { title: 'Progression', instruction: 'Roll progression for every eligible player. Players who fall out retire and their team gets a new random draftee.' },
+  approval: { title: 'Approval', instruction: 'Review the offseason, then approve it. Every staged change is applied and the next season starts.' },
 };
 
 export type StepStatus = 'complete' | 'incomplete';
@@ -28,7 +29,7 @@ export interface WizardInput {
 }
 
 /** Steps that never stop the commissioner from moving on. */
-const NEVER_BLOCKS: readonly WizardStep[] = ['order', 'new-teams'];
+const NEVER_BLOCKS: readonly WizardStep[] = ['order', 'new-teams', 'approval'];
 
 export function isWizardStep(value: unknown): value is WizardStep {
   return typeof value === 'string' && (WIZARD_STEPS as readonly string[]).includes(value);
@@ -43,6 +44,8 @@ export function stepStatuses({ plan, teams, arrivals }: WizardInput): StepStatus
   const aged = protectedAll && teams.every((t) => changes.some((c) => c.franchiseId === t.franchiseId && c.retiredId !== undefined));
   return {
     order: 'complete',
+    // Approving moves the season out of its offseason, so this step is never complete while the wizard is open.
+    approval: 'incomplete',
     departures: status(plan !== null),
     arrivals: status(plan !== null && arrivalsReady(arrivals)),
     'new-teams': status(plan !== null),

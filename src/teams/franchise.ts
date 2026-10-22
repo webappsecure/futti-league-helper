@@ -28,7 +28,8 @@ export interface FranchiseIdentity {
 
 export interface Franchise {
   id: string;
-  leagueId: string;
+  /** Absent for an unassigned team, one that left a league with no linked league to join. */
+  leagueId?: string;
   initialGrade: Grade;
   identities: FranchiseIdentity[];
 }
@@ -151,7 +152,7 @@ export function isFranchise(value: unknown): value is Franchise {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
   if (typeof v.id !== 'string' || v.id.length === 0) return false;
-  if (typeof v.leagueId !== 'string' || v.leagueId.length === 0) return false;
+  if (v.leagueId !== undefined && (typeof v.leagueId !== 'string' || v.leagueId.length === 0)) return false;
   if (!GRADES.includes(v.initialGrade as Grade)) return false;
   if (!Array.isArray(v.identities) || v.identities.length === 0) return false;
   return v.identities.every((entry) => {

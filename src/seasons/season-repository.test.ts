@@ -30,4 +30,11 @@ describe('getLeagueSeason', () => {
     await db.batch([put('s2', { id: 's2', leagueId: 'L2', index: 0, status: 'active' })]);
     expect(await getLeagueSeason(db, 'L1')).toEqual({ ok: true, value: null });
   });
+
+  it('returns the highest-index season of the league', async () => {
+    const db = createMemoryDatabase();
+    const next = { ...season, id: 's0', index: 2 };
+    await db.batch([put('s1', { ...season, status: 'archived' }), put('s0', next)]);
+    expect(await getLeagueSeason(db, 'L1')).toEqual({ ok: true, value: next });
+  });
 });

@@ -1,6 +1,7 @@
 import { Redirect, router, type Href } from 'expo-router';
 
 import { Button } from '@/components/button';
+import { ApprovalStep } from '@/components/offseason/approval-step';
 import { AgingStep } from '@/components/offseason/aging-step';
 import { ArrivalsStep } from '@/components/offseason/arrivals-step';
 import { FreeAgencyStep } from '@/components/offseason/free-agency-step';
@@ -85,7 +86,7 @@ function WizardSeason({ league, step }: { league: League; step: WizardStep }) {
     );
   }
   const current = season.state.season;
-  if (!league.relegation || current === null || current.status !== 'offseason') {
+  if (current === null || current.status !== 'offseason') {
     return (
       <WizardMessage actions={<ExitButton />}>
         <ThemedText accessibilityRole="alert">{league.name} is not in its offseason, so there is nothing to do here.</ThemedText>
@@ -159,6 +160,7 @@ function WizardStepScreen({ league, season, step }: { league: League; season: Se
       {step === 'progression' && data.plan !== null && status !== null && (
         <ProgressionStep league={league} archive={data.archive} plan={data.plan} teams={data.teams} arrivals={status} nameOf={nameOf} refresh={refresh} />
       )}
+      {step === 'approval' && data.plan !== null && <ApprovalStep league={league} plan={data.plan} onApproved={exit} />}
     </WizardShell>
   );
 }

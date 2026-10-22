@@ -16,7 +16,7 @@ interface OffseasonStatusCardProps {
   season: Season;
 }
 
-/** Where the offseason stands, with a button into the wizard. Shown for a relegation league whose season has ended. */
+/** Where the offseason stands, with a button into the wizard. Shown for a league whose season has ended. */
 export function OffseasonStatusCard({ league, season }: OffseasonStatusCardProps) {
   const { data, refresh, retry } = useOffseasonData(league, season);
   // The wizard changes the plan from another screen, so re-read it whenever this one comes back into view.

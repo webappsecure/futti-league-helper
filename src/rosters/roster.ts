@@ -37,7 +37,8 @@ export type RosterPlayer = StandardRosterPlayer | GoalieRosterPlayer;
 /** One document per team: 6 standard players followed by 2 goaltenders. */
 export interface Roster {
   franchiseId: string;
-  leagueId: string;
+  /** Absent for an unassigned team, one that left a league with no linked league to join. */
+  leagueId?: string;
   players: RosterPlayer[];
 }
 
@@ -217,10 +218,10 @@ export function isRoster(value: unknown): value is Roster {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
   if (typeof v.franchiseId !== 'string' || v.franchiseId.length === 0) return false;
-  if (typeof v.leagueId !== 'string' || v.leagueId.length === 0) return false;
+  if (v.leagueId !== undefined && (typeof v.leagueId !== 'string' || v.leagueId.length === 0)) return false;
   const players = v.players;
   if (!Array.isArray(players) || players.length !== STANDARD_PLAYERS + GOALTENDERS) return false;
-  const ok = players.every((p, i) => isPlayer(p, i < STANDARD_PLAYERS ? 'standard' : 'goalie'));
+  const ok = players.every((p, i) => isPlayer(p, i < STANDARD_PLAYERS ? 'standard' : 'goalie', 18, Infinity));
   if (!ok) return false;
   return new Set(players.map((p) => (p as RosterPlayer).id)).size === players.length;
 }

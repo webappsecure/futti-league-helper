@@ -99,7 +99,6 @@ export function stagedPlayerNames(plan: OffseasonPlan): string[] {
 }
 
 export type DepartureError =
-  | 'not-relegation'
   | 'promoted-count'
   | 'demoted-count'
   | 'unknown-team'
@@ -124,7 +123,6 @@ export function validateDepartures(input: {
 }): DepartureValidation {
   const { archive, league, promoted, demoted } = input;
   const bad = (error: DepartureError): DepartureValidation => ({ ok: false, error });
-  if (!league.relegation) return bad('not-relegation');
   if (promoted.length !== league.promotedCount) return bad('promoted-count');
   if (demoted.length !== league.demotedCount) return bad('demoted-count');
   if (promoted.length + demoted.length > archive.teams.length) return bad('too-few-teams');
@@ -137,8 +135,6 @@ export function validateDepartures(input: {
 
 export function departureErrorText(error: DepartureError, league: League): string {
   switch (error) {
-    case 'not-relegation':
-      return 'This league does not use promotion and relegation.';
     case 'promoted-count':
       return `Choose exactly ${league.promotedCount} promoted ${league.promotedCount === 1 ? 'team' : 'teams'}.`;
     case 'demoted-count':

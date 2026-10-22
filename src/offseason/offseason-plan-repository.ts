@@ -8,7 +8,7 @@ import { namePicker } from '@/rosters/roster-repository';
 import { NamesExhaustedError } from '@/rosters/roster';
 import type { Rng } from '@/rules/dice';
 import { acceptQueue } from '@/seasons/accept-queue';
-import type { Season } from '@/seasons/season';
+import { isSeason, SEASON_COLLECTION, type Season } from '@/seasons/season';
 import { getSeasonArchive } from '@/seasons/season-archive-repository';
 import { FRANCHISE_COLLECTION } from '@/teams/franchise-repository';
 import { identityForSeason, isFranchise, validateIdentityInput, type IdentityFieldErrors } from '@/teams/franchise';
@@ -242,13 +242,27 @@ interface StagedNames {
   draftees: string[];
 }
 
-/** Every staged new team and draftee name in every offseason plan, or a read failure. Fails closed on an unreadable plan. */
-async function listStagedNewTeams(db: Database): Promise<Loaded<StagedNames>> {
+/** The plans of seasons that are still in `offseason`; plans of finished seasons are history and never reserve names. Fails closed on an unreadable plan. */
+export async function listOffseasonPlans(db: Database): Promise<Loaded<OffseasonPlan[]>> {
+  const seasons = await db.list<unknown>(SEASON_COLLECTION);
+  if (!seasons.ok) return { ok: false, error: seasons.error };
+  const open = new Set(seasons.value.flatMap(({ value }) => (isSeason(value) && value.status === 'offseason' ? [value.id] : [])));
   const stored = await db.list<unknown>(OFFSEASON_PLAN_COLLECTION);
   if (!stored.ok) return { ok: false, error: stored.error };
-  const out: StagedNames = { teams: [], draftees: [] };
+  const plans: OffseasonPlan[] = [];
   for (const { id, value } of stored.value) {
     if (!isOffseasonPlan(value) || value.seasonId !== id) return { ok: false, error: new Error(`Saved offseason plan ${id} could not be read`) };
+    if (open.has(id)) plans.push(value);
+  }
+  return { ok: true, value: plans };
+}
+
+/** Every staged new team and draftee name in every plan still in the offseason, or a read failure. */
+async function listStagedNewTeams(db: Database): Promise<Loaded<StagedNames>> {
+  const plans = await listOffseasonPlans(db);
+  if (!plans.ok) return plans;
+  const out: StagedNames = { teams: [], draftees: [] };
+  for (const value of plans.value) {
     for (const team of value.newTeams ?? []) out.teams.push({ leagueId: value.leagueId, team });
     out.draftees.push(...stagedPlayerNames({ ...value, newTeams: undefined }));
   }
@@ -329,7 +343,7 @@ async function addNow(db: Database, league: League, input: NewTeamInput, vacancy
   if (!franchises.ok) return storage(franchises.error);
   const wanted = norm(checked.value.name);
   const usedByTeam = franchises.value.some(({ value }) => {
-    if (!isFranchise(value) || !loaded.chain.includes(value.leagueId)) return false;
+    if (!isFranchise(value) || value.leagueId === undefined || !loaded.chain.includes(value.leagueId)) return false;
     const identity = identityForSeason(value, loaded.season.index) ?? value.identities[0];
     return norm(identity.name) === wanted;
   });

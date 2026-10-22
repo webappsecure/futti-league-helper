@@ -109,11 +109,16 @@ describe('findDuplicateName', () => {
 
 describe('isFranchise', () => {
   it('accepts a valid document', () => expect(isFranchise(team('1', 'A'))).toBe(true));
+  it('accepts an unassigned team with no league', () => {
+    const { leagueId: _gone, ...unassigned } = team('1', 'A');
+    expect(isFranchise(unassigned)).toBe(true);
+  });
   it.each([
     null,
     'x',
     { ...team('1', 'A'), id: '' },
     { ...team('1', 'A'), leagueId: 5 },
+    { ...team('1', 'A'), leagueId: '' },
     { ...team('1', 'A'), initialGrade: 'E' },
     { ...team('1', 'A'), identities: [] },
     { ...team('1', 'A'), identities: [{ fromSeason: 1, city: 'x', name: 'y', primaryColor: 'red', secondaryColor: '#ffffff' }] },

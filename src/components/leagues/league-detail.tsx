@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -47,6 +48,15 @@ export function LeagueDetail({
 }: LeagueDetailProps) {
   const { state, refresh, retry } = useFranchises(league);
   const season = useLeagueSeason(league);
+  // Approving an offseason in the wizard changes the season, teams and rosters, so read them again when this screen returns.
+  const reload = useRef(() => {});
+  useEffect(() => {
+    reload.current = () => {
+      void season.refresh();
+      void refresh();
+    };
+  });
+  useFocusEffect(useCallback(() => reload.current(), []));
   const accepted = season.state.status === 'ready' && season.state.season !== null;
   const printCards = usePrintCards(league, season.state.status === 'ready' ? season.state.season : null);
   const [teamFocused, setTeamFocused] = useState(false);
@@ -79,7 +89,7 @@ export function LeagueDetail({
           <SeasonCard key={season.state.season.id} league={league} season={season.state.season} teams={state.teams} refreshSeason={season.refresh} />
         )}
 
-        {season.state.status === 'ready' && season.state.season?.status === 'offseason' && league.relegation && (
+        {season.state.status === 'ready' && season.state.season?.status === 'offseason' && (
           <OffseasonStatusCard key={`offseason-${season.state.season.id}`} league={league} season={season.state.season} />
         )}
 

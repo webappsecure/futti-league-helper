@@ -106,13 +106,26 @@ describe('isRoster', () => {
     ['wrong order', () => { const r = clone(); r.players.reverse(); return r; }],
     ['duplicate ids', () => { const r = clone(); r.players[1].id = r.players[0].id; return r; }],
     ['unnormalized name', () => { const r = clone(); r.players[0].name = 'smith'; return r; }],
-    ['age out of range', () => { const r = clone(); r.players[0].age = 31; return r; }],
+    ['age out of range', () => { const r = clone(); r.players[0].age = 17; return r; }],
+    ['non-string league id', () => ({ ...clone(), leagueId: 5 })],
+    ['empty league id', () => ({ ...clone(), leagueId: '' })],
     ['total above 8', () => { const r = clone(); r.players[0].offense = 7; r.players[0].defense = 7; return r; }],
     ['bad stars', () => { const r = clone(); r.players[0].controlStars = 3; return r; }],
     ['invalid goaltending', () => { const r = clone(); r.players[6].goaltending = 37; return r; }],
     ['missing rolls', () => { const r = clone(); delete r.players[0].rolls; return r; }],
   ])('rejects %s', (_label, make) => {
     expect(isRoster(make())).toBe(false);
+  });
+});
+
+describe('isRoster ages and unassigned teams', () => {
+  it('accepts veterans of any age from 18 and a roster with no league', () => {
+    const r = JSON.parse(JSON.stringify(sample()));
+    r.players[0].age = 18;
+    r.players[1].age = 35;
+    expect(isRoster(r)).toBe(true);
+    delete r.leagueId;
+    expect(isRoster(r)).toBe(true);
   });
 });
 

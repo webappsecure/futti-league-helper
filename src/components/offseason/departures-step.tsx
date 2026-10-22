@@ -69,11 +69,15 @@ export function PlanEditor({ league, season, archive, saved, refresh }: PlanEdit
           : 'Your saved plan. Change who goes up or down, then save again.'}{' '}
         Nothing changes until the offseason is approved.
       </ThemedText>
-      <ThemedText type="small">
-        Promoted {promoted.length} of {league.promotedCount}, demoted {demoted.length} of {league.demotedCount}
-      </ThemedText>
+      {league.relegation ? (
+        <ThemedText type="small">
+          Promoted {promoted.length} of {league.promotedCount}, demoted {demoted.length} of {league.demotedCount}
+        </ThemedText>
+      ) : (
+        <ThemedText type="small">Nobody leaves this league. Save the plan to continue.</ThemedText>
+      )}
       <ThemedView style={styles.list}>
-        {archive.teams.map((team) => {
+        {league.relegation && archive.teams.map((team) => {
           const name = displayName(team.identity, league.namingStyle);
           return (
             <ThemedView key={team.franchiseId} style={styles.row}>

@@ -11,7 +11,7 @@ const input = (p: OffseasonPlan | null, arrivals: WizardInput['arrivals'] = quie
 
 describe('steps', () => {
   it('lists the steps in order and recognizes their ids', () => {
-    expect([...WIZARD_STEPS]).toEqual(['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging', 'free-agency', 'rookie-draft', 'progression']);
+    expect([...WIZARD_STEPS]).toEqual(['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging', 'free-agency', 'rookie-draft', 'progression', 'approval']);
     expect(isWizardStep('aging')).toBe(true);
     expect(isWizardStep('nope')).toBe(false);
     expect(isWizardStep(undefined)).toBe(false);
@@ -20,7 +20,8 @@ describe('steps', () => {
     expect(previousStep('order')).toBeNull();
     expect(nextStep('free-agency')).toBe('rookie-draft');
     expect(nextStep('rookie-draft')).toBe('progression');
-    expect(nextStep('progression')).toBeNull();
+    expect(nextStep('progression')).toBe('approval');
+    expect(nextStep('approval')).toBeNull();
     expect(previousStep('arrivals')).toBe('departures');
     expect(nextStep('arrivals')).toBe('new-teams');
   });
@@ -28,7 +29,7 @@ describe('steps', () => {
 
 describe('stepStatuses', () => {
   it('has only the order complete with no plan', () => {
-    expect(stepStatuses(input(null))).toEqual({ order: 'complete', departures: 'incomplete', arrivals: 'incomplete', 'new-teams': 'incomplete', protection: 'incomplete', aging: 'incomplete', 'free-agency': 'incomplete', 'rookie-draft': 'incomplete', progression: 'incomplete' });
+    expect(stepStatuses(input(null))).toEqual({ order: 'complete', departures: 'incomplete', arrivals: 'incomplete', 'new-teams': 'incomplete', protection: 'incomplete', aging: 'incomplete', 'free-agency': 'incomplete', 'rookie-draft': 'incomplete', progression: 'incomplete', approval: 'incomplete' });
   });
   it('completes departures, arrivals and new teams for a plan with nothing expected', () => {
     const s = stepStatuses(input(plan()));
