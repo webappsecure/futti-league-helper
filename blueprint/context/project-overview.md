@@ -1,6 +1,6 @@
 # Fütti League and Game Tracker - Project Overview
 
-<!-- blueprint:source-hash a67fb8d31b97432f517e28a43a4c16d318c094dd9979b784e0fa898bec25327c -->
+<!-- blueprint:source-hash 21d27bb01995cf3f89ba6e83fce35ae7f6b3220fce971fe52ab08bdcda01ddd4 -->
 
 > A commissioner's tool (Expo / React Native, local-first) for creating and running leagues of the fictional futsal-style sport Fütti: dice-chart roster generation, a promotion and relegation offseason, and permanent franchise, player and season history. It never simulates matches.
 

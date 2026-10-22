@@ -13,10 +13,10 @@ import { arrivalsReady, buildTeamChanges, participatingTeams, type Participating
 const fail = (error: PlanError): { ok: false; error: PlanError } => ({ ok: false, error });
 const storage = (error: Error) => fail({ kind: 'storage', error });
 
-type Loaded = { ok: true; plan: OffseasonPlan; teams: ParticipatingTeam[]; archive: SeasonArchive; sourceArchives: SeasonArchive[] } | { ok: false; error: PlanError };
+export type Loaded = { ok: true; plan: OffseasonPlan; teams: ParticipatingTeam[]; archive: SeasonArchive; sourceArchives: SeasonArchive[] } | { ok: false; error: PlanError };
 
 /** The offseason plan and its participating teams, once the season, archive and arrivals are ready for roster changes. */
-async function load(db: Database, league: League): Promise<Loaded> {
+export async function load(db: Database, league: League): Promise<Loaded> {
   const found = await getLeagueSeason(db, league.id);
   if (!found.ok) return storage(found.error);
   const season = found.value;
@@ -35,14 +35,22 @@ async function load(db: Database, league: League): Promise<Loaded> {
   return { ok: true, plan: plan.value, teams: participatingTeams(archive.value, plan.value), archive: archive.value, sourceArchives };
 }
 
-/** Saves changed protections or aging results; free agency picks depend on them, so they are dropped. */
+/** Saves changed protections or aging results; free agency picks and the draft depend on them, so they are dropped. */
 async function write(db: Database, plan: OffseasonPlan, teamChanges: StagedTeamChange[]): Promise<PlanResult> {
   const next: OffseasonPlan = { ...plan, teamChanges };
   delete next.freeAgentPicks;
-  return put(db, next);
+  return putClearingDraft(db, next);
 }
 
-async function put(db: Database, next: OffseasonPlan): Promise<PlanResult> {
+/** Saves a plan after dropping the draft pool and rookie picks, which depend on every earlier roster change. */
+export async function putClearingDraft(db: Database, next: OffseasonPlan): Promise<PlanResult> {
+  delete next.draftPool;
+  delete next.draftPicks;
+  return putRaw(db, next);
+}
+
+/** Saves a plan exactly as given. */
+export async function putRaw(db: Database, next: OffseasonPlan): Promise<PlanResult> {
   const written = await db.batch([{ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: next.seasonId, value: next }]);
   return written.ok ? { ok: true, value: next } : storage(written.error);
 }
@@ -86,7 +94,7 @@ async function pickNow(db: Database, league: League, playerId: string): Promise<
   const checked = validatePick({ order, teams: loaded.teams, changes, picks }, onTheClock ?? '', playerId);
   // The pick is always for the team on the clock, so `not-on-the-clock` cannot come back.
   if (!checked.ok) return fail({ kind: checked.error as Exclude<typeof checked.error, 'not-on-the-clock'> });
-  return put(db, { ...loaded.plan, freeAgentPicks: [...picks, { franchiseId: onTheClock!, playerId }] });
+  return putClearingDraft(db, { ...loaded.plan, freeAgentPicks: [...picks, { franchiseId: onTheClock!, playerId }] });
 }
 
 /** Removes the last free agency pick. */
@@ -97,5 +105,5 @@ async function undoNow(db: Database, league: League): Promise<PlanResult> {
   if (!loaded.ok) return loaded;
   const picks = loaded.plan.freeAgentPicks ?? [];
   if (picks.length === 0) return fail({ kind: 'no-picks' });
-  return put(db, { ...loaded.plan, freeAgentPicks: picks.slice(0, -1) });
+  return putClearingDraft(db, { ...loaded.plan, freeAgentPicks: picks.slice(0, -1) });
 }

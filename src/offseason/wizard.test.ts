@@ -11,14 +11,15 @@ const input = (p: OffseasonPlan | null, arrivals: WizardInput['arrivals'] = quie
 
 describe('steps', () => {
   it('lists the steps in order and recognizes their ids', () => {
-    expect([...WIZARD_STEPS]).toEqual(['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging', 'free-agency']);
+    expect([...WIZARD_STEPS]).toEqual(['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging', 'free-agency', 'rookie-draft']);
     expect(isWizardStep('aging')).toBe(true);
     expect(isWizardStep('nope')).toBe(false);
     expect(isWizardStep(undefined)).toBe(false);
   });
   it('has previous and next at both ends', () => {
     expect(previousStep('order')).toBeNull();
-    expect(nextStep('free-agency')).toBeNull();
+    expect(nextStep('free-agency')).toBe('rookie-draft');
+    expect(nextStep('rookie-draft')).toBeNull();
     expect(previousStep('arrivals')).toBe('departures');
     expect(nextStep('arrivals')).toBe('new-teams');
   });
@@ -26,7 +27,7 @@ describe('steps', () => {
 
 describe('stepStatuses', () => {
   it('has only the order complete with no plan', () => {
-    expect(stepStatuses(input(null))).toEqual({ order: 'complete', departures: 'incomplete', arrivals: 'incomplete', 'new-teams': 'incomplete', protection: 'incomplete', aging: 'incomplete', 'free-agency': 'incomplete' });
+    expect(stepStatuses(input(null))).toEqual({ order: 'complete', departures: 'incomplete', arrivals: 'incomplete', 'new-teams': 'incomplete', protection: 'incomplete', aging: 'incomplete', 'free-agency': 'incomplete', 'rookie-draft': 'incomplete' });
   });
   it('completes departures, arrivals and new teams for a plan with nothing expected', () => {
     const s = stepStatuses(input(plan()));
@@ -53,13 +54,30 @@ describe('stepStatuses', () => {
     expect(stepStatuses(input(allPicks))['free-agency']).toBe('complete');
     expect(stepStatuses(input(plan({ freeAgentPicks: allPicks.freeAgentPicks })))['free-agency']).toBe('incomplete');
   });
+  it('completes the rookie draft only with a pool and every team full', () => {
+    const changes = ['a', 'b'].map((franchiseId) => ({ franchiseId, protectedId: 'p', retiredId: 'r', releasedId: 'q' }));
+    const picks = [{ franchiseId: 'a', playerId: 'q' }, { franchiseId: 'b', playerId: 'r' }];
+    // The changes name players who are not on these rosters, so each team keeps exactly the players it was given.
+    const withPlayers = (id: string, standard: number): ParticipatingTeam => ({
+      franchiseId: id,
+      origin: 'staying',
+      players: [...Array.from({ length: standard }, (_, i) => ({ id: `${id}s${i}`, kind: 'standard' })), { id: `${id}g1`, kind: 'goalie' }, { id: `${id}g2`, kind: 'goalie' }] as RosterPlayer[],
+    });
+    const base = plan({ teamChanges: changes, freeAgentPicks: picks });
+    const full = [withPlayers('a', 6), withPlayers('b', 6)];
+    const short = [withPlayers('a', 6), withPlayers('b', 5)];
+    expect(stepStatuses(input(base, quiet, full))['rookie-draft']).toBe('incomplete');
+    expect(stepStatuses(input({ ...base, draftPool: [] }, quiet, full))['rookie-draft']).toBe('complete');
+    expect(stepStatuses(input({ ...base, draftPool: [] }, quiet, short))['rookie-draft']).toBe('incomplete');
+    expect(stepStatuses(input({ ...base, freeAgentPicks: [], draftPool: [] }, quiet, full))['rookie-draft']).toBe('incomplete');
+  });
   it('completes the team steps when a plan is saved and no team takes part', () => {
     const s = stepStatuses(input(plan(), quiet, []));
-    expect([s.protection, s.aging, s['free-agency']]).toEqual(['complete', 'complete', 'complete']);
+    expect([s.protection, s.aging, s['free-agency'], s['rookie-draft']]).toEqual(['complete', 'complete', 'complete', 'complete']);
   });
   it('keeps the team steps incomplete without a plan', () => {
     const s = stepStatuses(input(null, quiet, []));
-    expect([s.protection, s.aging, s['free-agency']]).toEqual(['incomplete', 'incomplete', 'incomplete']);
+    expect([s.protection, s.aging, s['free-agency'], s['rookie-draft']]).toEqual(['incomplete', 'incomplete', 'incomplete', 'incomplete']);
   });
 });
 
@@ -71,7 +89,7 @@ describe('navigation rules', () => {
     expect(firstIncompleteStep(state(plan()))).toBe('protection');
     const aged = plan({ teamChanges: ['a', 'b'].map((franchiseId) => ({ franchiseId, protectedId: 'p', retiredId: 'r', releasedId: 'q' })) });
     expect(firstIncompleteStep(state(aged))).toBe('free-agency');
-    expect(firstIncompleteStep(state({ ...aged, freeAgentPicks: [{ franchiseId: 'a', playerId: 'q' }, { franchiseId: 'b', playerId: 'r' }] }))).toBeNull();
+    expect(firstIncompleteStep(state({ ...aged, freeAgentPicks: [{ franchiseId: 'a', playerId: 'q' }, { franchiseId: 'b', playerId: 'r' }] }))).toBe('rookie-draft');
   });
   it('opens earlier and current steps but not later ones', () => {
     const s = state(null);

@@ -3,7 +3,7 @@ import { normalizeName } from '@/names/normalize-name';
 import { isValidGoaltending } from '@/rules/goaltending';
 import type { Grade, Stars } from '@/rules/charts';
 import type { Rng } from '@/rules/dice';
-import { generateGoaltender, generateStandardPlayer } from '@/rules/player-generation';
+import { generateDraftGoaltender, generateDraftStandardPlayer, generateGoaltender, generateStandardPlayer } from '@/rules/player-generation';
 
 export const ROSTER_COLLECTION = 'rosters';
 export const STANDARD_PLAYERS = 6;
@@ -51,16 +51,9 @@ export class NamesExhaustedError extends Error {
 
 export type PickName = () => string;
 
-export function generateStandard(
-  grade: Grade,
-  rng: Rng,
-  pickName: PickName,
-  newId: () => string = createId,
-): StandardRosterPlayer {
-  const name = pickName();
-  const r = generateStandardPlayer(grade, rng);
+function standardFrom(r: ReturnType<typeof generateStandardPlayer>, name: string, id: string): StandardRosterPlayer {
   return {
-    id: newId(),
+    id,
     kind: 'standard',
     name,
     age: r.age.value,
@@ -78,16 +71,9 @@ export function generateStandard(
   };
 }
 
-export function generateGoalie(
-  grade: Grade,
-  rng: Rng,
-  pickName: PickName,
-  newId: () => string = createId,
-): GoalieRosterPlayer {
-  const name = pickName();
-  const r = generateGoaltender(grade, rng);
+function goalieFrom(r: ReturnType<typeof generateGoaltender>, name: string, id: string): GoalieRosterPlayer {
   return {
-    id: newId(),
+    id,
     kind: 'goalie',
     name,
     age: r.age.value,
@@ -99,6 +85,27 @@ export function generateGoalie(
       sportsmanship: r.sportsmanship.roll as number,
     },
   };
+}
+
+export function generateStandard(grade: Grade, rng: Rng, pickName: PickName, newId: () => string = createId): StandardRosterPlayer {
+  const name = pickName();
+  return standardFrom(generateStandardPlayer(grade, rng), name, newId());
+}
+
+export function generateGoalie(grade: Grade, rng: Rng, pickName: PickName, newId: () => string = createId): GoalieRosterPlayer {
+  const name = pickName();
+  return goalieFrom(generateGoaltender(grade, rng), name, newId());
+}
+
+/** A draftee: age 18-22 and ratings from the draft charts. */
+export function generateDraftStandard(rng: Rng, pickName: PickName, newId: () => string = createId): StandardRosterPlayer {
+  const name = pickName();
+  return standardFrom(generateDraftStandardPlayer(rng), name, newId());
+}
+
+export function generateDraftGoalie(rng: Rng, pickName: PickName, newId: () => string = createId): GoalieRosterPlayer {
+  const name = pickName();
+  return goalieFrom(generateDraftGoaltender(rng), name, newId());
 }
 
 export function generateRoster(
@@ -170,13 +177,13 @@ function isRoll(value: unknown, min: number, max: number): boolean {
   return isInt(value, min, max);
 }
 
-function isPlayer(value: unknown, kind: 'standard' | 'goalie'): value is RosterPlayer {
+function isPlayer(value: unknown, kind: 'standard' | 'goalie', minAge = 20, maxAge = 30): value is RosterPlayer {
   if (typeof value !== 'object' || value === null) return false;
   const p = value as Record<string, unknown>;
   if (p.kind !== kind) return false;
   if (typeof p.id !== 'string' || p.id.length === 0) return false;
   if (typeof p.name !== 'string' || normalizeName(p.name) !== p.name) return false;
-  if (!isInt(p.age, 20, 30) || !isInt(p.sportsmanship, 1, 5)) return false;
+  if (!isInt(p.age, minAge, maxAge) || !isInt(p.sportsmanship, 1, 5)) return false;
   const rolls = p.rolls as Record<string, unknown> | null;
   if (typeof rolls !== 'object' || rolls === null) return false;
   if (!isRoll(rolls.age, 2, 12) || !isRoll(rolls.sportsmanship, 2, 12)) return false;
@@ -192,6 +199,12 @@ function isPlayer(value: unknown, kind: 'standard' | 'goalie'): value is RosterP
     (rolls.split === null || isRoll(rolls.split, 1, 6)) &&
     isRoll(rolls.stars, 2, 12)
   );
+}
+
+/** A drafted player as staged in an offseason plan: either kind, age 18-22, otherwise a valid roster player. */
+export function isDraftee(value: unknown): value is RosterPlayer {
+  const kind = (value as { kind?: unknown } | null)?.kind;
+  return (kind === 'standard' || kind === 'goalie') && isPlayer(value, kind, 18, 22);
 }
 
 export function isRoster(value: unknown): value is Roster {

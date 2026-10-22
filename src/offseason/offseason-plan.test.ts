@@ -1,5 +1,7 @@
 import type { League } from '@/leagues/league';
 import type { SeasonArchive } from '@/seasons/season-archive';
+import { generateDraftStandard } from '@/rosters/roster';
+import { rngFromDice } from '@/rules/test-rng';
 import { departureErrorText, isOffseasonPlan, suggestDepartures, validateDepartures } from './offseason-plan';
 
 const league = (promotedCount: number, demotedCount: number, relegation = true): League => ({
@@ -80,5 +82,27 @@ describe('isOffseasonPlan', () => {
     expect(isOffseasonPlan({ ...good, demoted: [1] })).toBe(false);
     expect(isOffseasonPlan({ ...good, promoted: ['a'], demoted: ['a'] })).toBe(false);
     expect(isOffseasonPlan({ ...good, promoted: ['a', 'a'] })).toBe(false);
+  });
+});
+
+describe('isOffseasonPlan draft pool and picks', () => {
+  const base = { seasonId: 's-1', leagueId: 'L1', promoted: [], demoted: [] };
+  const draftee = (id: string) => generateDraftStandard(rngFromDice(1, 1, 6, 6, 3, 1, 1, 1, 1), () => `ROE${id === 'd1' ? 'A' : 'B'}`, () => id);
+  const pool = [draftee('d1'), draftee('d2')];
+  it('accepts a pool with picks, several for one team', () => {
+    expect(isOffseasonPlan({ ...base, draftPool: pool })).toBe(true);
+    expect(isOffseasonPlan({ ...base, draftPool: pool, draftPicks: [{ franchiseId: 'a', playerId: 'd1' }, { franchiseId: 'a', playerId: 'd2' }] })).toBe(true);
+  });
+  it('rejects bad pool entries', () => {
+    expect(isOffseasonPlan({ ...base, draftPool: [{ ...pool[0], age: 25 }] })).toBe(false);
+    expect(isOffseasonPlan({ ...base, draftPool: [{ ...pool[0], offense: 9 }] })).toBe(false);
+    expect(isOffseasonPlan({ ...base, draftPool: [pool[0], pool[0]] })).toBe(false);
+    expect(isOffseasonPlan({ ...base, draftPool: 'x' })).toBe(false);
+  });
+  it('rejects bad picks', () => {
+    expect(isOffseasonPlan({ ...base, draftPicks: [] })).toBe(false);
+    expect(isOffseasonPlan({ ...base, draftPool: pool, draftPicks: [{ franchiseId: 'a', playerId: 'zz' }] })).toBe(false);
+    expect(isOffseasonPlan({ ...base, draftPool: pool, draftPicks: [{ franchiseId: 'a', playerId: 'd1' }, { franchiseId: 'b', playerId: 'd1' }] })).toBe(false);
+    expect(isOffseasonPlan({ ...base, draftPool: pool, draftPicks: [{ franchiseId: '', playerId: 'd1' }] })).toBe(false);
   });
 });

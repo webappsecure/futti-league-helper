@@ -1,8 +1,9 @@
 import type { OffseasonPlan } from './offseason-plan';
 import type { ArrivalStatus } from './offseason-plan-repository';
+import { draftIsComplete, freeAgencyComplete } from './rookie-draft';
 import { arrivalsReady, type ParticipatingTeam } from './roster-changes';
 
-export const WIZARD_STEPS = ['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging', 'free-agency'] as const;
+export const WIZARD_STEPS = ['order', 'departures', 'arrivals', 'new-teams', 'protection', 'aging', 'free-agency', 'rookie-draft'] as const;
 export type WizardStep = (typeof WIZARD_STEPS)[number];
 
 export const STEP_INFO: Record<WizardStep, { title: string; instruction: string }> = {
@@ -13,6 +14,7 @@ export const STEP_INFO: Record<WizardStep, { title: string; instruction: string 
   protection: { title: 'Protection', instruction: 'Protect one player on each team. A protected player cannot retire or be released.' },
   aging: { title: 'Aging, retirement and release', instruction: 'Age every player a year, retire the oldest unprotected player on each team and release one more at random.' },
   'free-agency': { title: 'Free agency draft', instruction: 'Each team picks one released player, in draft order. The team on the clock is shown.' },
+  'rookie-draft': { title: 'Rookie draft', instruction: 'Generate the draft pool, then pick for each team that still needs players, worst finisher first. The team on the clock is shown.' },
 };
 
 export type StepStatus = 'complete' | 'incomplete';
@@ -45,6 +47,7 @@ export function stepStatuses({ plan, teams, arrivals }: WizardInput): StepStatus
     'new-teams': status(plan !== null),
     protection: status(protectedAll),
     aging: status(aged),
+    'rookie-draft': status(plan !== null && (teams.length === 0 || (plan.draftPool !== undefined && freeAgencyComplete(teams, plan) && draftIsComplete(teams, plan)))),
     'free-agency': status(aged && teams.every((t) => (plan?.freeAgentPicks ?? []).some((p) => p.franchiseId === t.franchiseId))),
   };
 }

@@ -1,5 +1,5 @@
 import type { League } from '@/leagues/league';
-import { isRoster, type RosterPlayer } from '@/rosters/roster';
+import { isDraftee, isRoster, type RosterPlayer } from '@/rosters/roster';
 import type { Grade } from '@/rules/charts';
 import type { SeasonArchive } from '@/seasons/season-archive';
 import { validateIdentityInput } from '@/teams/franchise';
@@ -50,6 +50,12 @@ export interface StagedFreeAgentPick {
   playerId: string;
 }
 
+/** One rookie draft pick: `playerId` is a draftee in `draftPool`, taken by `franchiseId`. */
+export interface StagedDraftPick {
+  franchiseId: string;
+  playerId: string;
+}
+
 /** The teams leaving the league this offseason, by franchise id, and the teams staged to arrive or to be created. One document per season; its id is the season id. */
 export interface OffseasonPlan {
   seasonId: string;
@@ -61,6 +67,10 @@ export interface OffseasonPlan {
   teamChanges?: StagedTeamChange[];
   /** Free agency picks in the order they were made. */
   freeAgentPicks?: StagedFreeAgentPick[];
+  /** Generated draftees (age 18-22); the ones nobody picks are destroyed at approval. */
+  draftPool?: RosterPlayer[];
+  /** Rookie draft picks in the order they were made; a team may appear several times. */
+  draftPicks?: StagedDraftPick[];
 }
 
 export type DepartureError =
@@ -200,6 +210,23 @@ export function isOffseasonPlan(value: unknown): value is OffseasonPlan {
     const list = picks as StagedFreeAgentPick[];
     if (new Set(list.map((p) => p.franchiseId)).size !== list.length) return false;
     if (new Set(list.map((p) => p.playerId)).size !== list.length) return false;
+  }
+  let poolIds = new Set<string>();
+  if (v.draftPool !== undefined) {
+    if (!Array.isArray(v.draftPool) || !v.draftPool.every(isDraftee)) return false;
+    poolIds = new Set((v.draftPool as RosterPlayer[]).map((p) => p.id));
+    if (poolIds.size !== v.draftPool.length) return false;
+  }
+  if (v.draftPicks !== undefined) {
+    if (v.draftPool === undefined || !Array.isArray(v.draftPicks)) return false;
+    const picks = v.draftPicks as unknown[];
+    const valid = picks.every((p) => {
+      if (typeof p !== 'object' || p === null) return false;
+      const q = p as Record<string, unknown>;
+      return typeof q.franchiseId === 'string' && q.franchiseId.length > 0 && typeof q.playerId === 'string' && poolIds.has(q.playerId);
+    });
+    if (!valid) return false;
+    if (new Set((picks as StagedDraftPick[]).map((p) => p.playerId)).size !== picks.length) return false;
   }
   return true;
 }

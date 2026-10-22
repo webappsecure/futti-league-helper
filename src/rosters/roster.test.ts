@@ -1,8 +1,11 @@
 import { rngFromDice } from '@/rules/test-rng';
 import {
+  generateDraftGoalie,
+  generateDraftStandard,
   generateGoalie,
   generateRoster,
   generateStandard,
+  isDraftee,
   isRoster,
   NAME_MAX_LENGTH,
   renamePlayer,
@@ -167,5 +170,34 @@ describe('renamePlayer', () => {
       ok: false,
       error: { kind: 'invalid-name' },
     });
+  });
+});
+
+describe('draftees', () => {
+  it('builds a standard draftee from the draft charts', () => {
+    // age 1+1=2 -> 18; draft total 6+6=12 -> 8; split d6 3; stars 1+1; sp 1+1
+    const d = generateDraftStandard(rngFromDice(1, 1, 6, 6, 3, 1, 1, 1, 1), () => 'ROE', nextId);
+    expect(d.age).toBe(18);
+    expect(d.rolls).toMatchObject({ age: 2, total: 12, split: 3 });
+    expect(d.offense + d.defense).toBe(8);
+    expect(isDraftee(d)).toBe(true);
+  });
+
+  it('builds a goaltender draftee from the draft goaltending chart', () => {
+    // age 6+6=12 -> 22; goaltending 4+4=8 -> 41; sp 1+1
+    const g = generateDraftGoalie(rngFromDice(6, 6, 4, 4, 1, 1), () => 'ROE', nextId);
+    expect(g.age).toBe(22);
+    expect(g.goaltending).toBe(41);
+    expect(isDraftee(g)).toBe(true);
+  });
+
+  it('accepts only ages 18 to 22', () => {
+    const d = generateDraftStandard(rngFromDice(1, 1, 6, 6, 3, 1, 1, 1, 1), () => 'ROE', nextId);
+    expect(isDraftee({ ...d, age: 22 })).toBe(true);
+    expect(isDraftee({ ...d, age: 17 })).toBe(false);
+    expect(isDraftee({ ...d, age: 23 })).toBe(false);
+    expect(isDraftee({ ...d, defense: 9 })).toBe(false);
+    expect(isDraftee(null)).toBe(false);
+    expect(isDraftee({ ...d, kind: 'other' })).toBe(false);
   });
 });

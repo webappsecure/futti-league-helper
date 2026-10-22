@@ -51,6 +51,10 @@ export type PlanError =
   | { kind: 'draft-complete' }
   | { kind: 'not-in-pool' }
   | { kind: 'no-picks' }
+  | { kind: 'free-agency-incomplete' }
+  | { kind: 'pool-not-generated' }
+  | { kind: 'picks-exist' }
+  | { kind: 'kind-not-needed' }
   | { kind: 'blocked'; blocked: BlockedNeighbor[] }
   | { kind: 'missing-team'; franchiseId: string }
   | { kind: 'no-season' }
@@ -404,6 +408,14 @@ export function planErrorText(error: PlanError, league: League): string {
       return 'That player is not available in free agency.';
     case 'no-picks':
       return 'There is no pick to undo.';
+    case 'free-agency-incomplete':
+      return 'Finish the free agency draft first.';
+    case 'pool-not-generated':
+      return 'Generate the draft pool first.';
+    case 'picks-exist':
+      return 'Undo the rookie picks before regenerating the draft pool.';
+    case 'kind-not-needed':
+      return 'That team does not need that kind of player.';
     case 'blocked':
       return error.blocked.map(blockedText).join(' ');
     case 'missing-team':

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
 import { Button } from '@/components/button';
+import { TeamRosterPanel, type RosterRow } from '@/components/offseason/team-roster-panel';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Accent, Spacing } from '@/constants/theme';
@@ -57,6 +58,16 @@ export function FreeAgencyStep({ league, archive, plan, teams, arrivals, nameOf,
     return overLimit(counts) ? [`${nameOf(team)} has ${counts.standard} position players and ${counts.goalies} goaltenders; fix this by hand before approval.`] : [];
   });
 
+  const rosterRows = (id: string): RosterRow[] => {
+    const team = byId(id);
+    const change = changes.find((c) => c.franchiseId === id);
+    const kept = team.players
+      .filter((p) => p.id !== change?.retiredId && p.id !== change?.releasedId)
+      .map((player): RosterRow => ({ player, ageBy: AGING_YEARS, note: player.id === change?.protectedId ? 'protected' : undefined }));
+    const picked = pickedBy(id, teams, picks).map((player): RosterRow => ({ player, ageBy: AGING_YEARS, note: 'free agent pick' }));
+    return [...kept, ...picked];
+  };
+
   const run = async (action: () => ReturnType<typeof makeFreeAgentPick>) => {
     if (busy) return;
     setBusy(true);
@@ -72,6 +83,33 @@ export function FreeAgencyStep({ league, archive, plan, teams, arrivals, nameOf,
     }
   };
 
+  const clockName = clock === null ? '' : nameOf(byId(clock));
+  const row = ({ player, fromFranchiseId }: (typeof pool)[number]) => {
+    const line = playerLine(player);
+    const details = line.details.replace(`Age ${player.age}`, `Age ${player.age + AGING_YEARS}`);
+    const own = fromFranchiseId === clock;
+    const from = own ? 'released by this team' : `released by ${nameOf(byId(fromFranchiseId))}`;
+    return (
+      <Pressable
+        key={player.id}
+        accessibilityRole="button"
+        accessibilityLabel={`Pick ${player.name}, ${clockName}`}
+        accessibilityState={{ disabled: busy }}
+        disabled={busy}
+        onPress={() => run(() => makeFreeAgentPick(db, league, player.id))}
+        style={({ pressed }) => pressed && styles.dim}>
+        <ThemedView type="backgroundElement" style={styles.player}>
+          <ThemedText accessibilityLabel={`${line.label}. ${line.spoken ?? details}. ${from}`}>
+            {line.label}  {details}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {from}
+          </ThemedText>
+        </ThemedView>
+      </Pressable>
+    );
+  };
+
   return (
     <ThemedView style={styles.body}>
       {clock !== null ? (
@@ -83,31 +121,11 @@ export function FreeAgencyStep({ league, archive, plan, teams, arrivals, nameOf,
           <ThemedText type="small">
             Needs: {needsText(rosterNeeds(rosterCounts(byId(clock), changes.find((c) => c.franchiseId === clock), pickedBy(clock, teams, picks))))}
           </ThemedText>
-          {pool.map(({ player, fromFranchiseId }) => {
-            const line = playerLine(player);
-            const details = line.details.replace(`Age ${player.age}`, `Age ${player.age + AGING_YEARS}`);
-            const own = fromFranchiseId === clock;
-            const from = own ? 'released by this team' : `released by ${nameOf(byId(fromFranchiseId))}`;
-            return (
-              <Pressable
-                key={player.id}
-                accessibilityRole="button"
-                accessibilityLabel={`Pick ${player.name}, ${nameOf(byId(clock))}`}
-                accessibilityState={{ disabled: busy }}
-                disabled={busy}
-                onPress={() => run(() => makeFreeAgentPick(db, league, player.id))}
-                style={({ pressed }) => pressed && styles.dim}>
-                <ThemedView type="backgroundElement" style={styles.player}>
-                  <ThemedText accessibilityLabel={`${line.label}. ${line.spoken ?? details}. ${from}`}>
-                    {line.label}  {details}
-                  </ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {from}
-                  </ThemedText>
-                </ThemedView>
-              </Pressable>
-            );
-          })}
+          <TeamRosterPanel key={clock} teamName={nameOf(byId(clock))} rows={rosterRows(clock)} />
+          <ThemedText type="smallBold">Position players</ThemedText>
+          {pool.filter((e) => e.player.kind === 'standard').map(row)}
+          <ThemedText type="smallBold">Goaltenders</ThemedText>
+          {pool.filter((e) => e.player.kind === 'goalie').map(row)}
         </>
       ) : (
         <>
