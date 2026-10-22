@@ -7,7 +7,7 @@ import { finishSeason } from '@/seasons/season-archive-repository';
 import { createMemoryDatabase } from '@/storage/memory-database';
 import type { Database } from '@/storage/types';
 import { createFranchise, FRANCHISE_COLLECTION, listFranchises } from '@/teams/franchise-repository';
-import { getOffseasonPlan, saveOffseasonPlan, stageArrivals } from './offseason-plan-repository';
+import { getOffseasonPlan, planErrorText, saveOffseasonPlan, stageArrivals } from './offseason-plan-repository';
 import { ageAndRelease, load, makeFreeAgentPick, setProtection, undoFreeAgentPick } from './roster-changes-repository';
 import { generateDraftPool, makeRookiePick, undoRookiePick } from './rookie-draft-repository';
 import { rookieDraftOrder, rookieOnTheClock, rookiePool, teamNeeds } from './rookie-draft';
@@ -228,7 +228,8 @@ describe('rookie draft', () => {
     const clock = rookieOnTheClock(rookieDraftOrder(archive, plan, sourceArchives), teams, plan)!;
     const needs = teamNeeds(teams.find((t) => t.franchiseId === clock)!, teams, plan);
     const wrong = plan.draftPool!.find((p) => (p.kind === 'goalie' ? needs.goalies : needs.standard) === 0);
-    if (wrong !== undefined) expect(await makeRookiePick(db, l, wrong.id)).toMatchObject({ ok: false, error: { kind: 'kind-not-needed' } });
+    if (wrong === undefined) throw new Error('the fixture needs a draftee of a kind the team on the clock does not need');
+    expect(await makeRookiePick(db, l, wrong.id)).toMatchObject({ ok: false, error: { kind: 'kind-not-needed' } });
   });
 
   it('needs free agency to be finished', async () => {
@@ -245,6 +246,14 @@ describe('rookie draft', () => {
     const broken = new Proxy(db, { get: (target, key) => (key === 'batch' ? async () => ({ ok: false, error: new Error('disk full') }) : (target as never)[key]) }) as Database;
     expect(await generateDraftPool(broken, l)).toMatchObject({ ok: false, error: { kind: 'storage' } });
     expect(JSON.stringify(await planOf(db, 's-S'))).toBe(before);
+  });
+});
+
+describe('planErrorText', () => {
+  it('has text for the rookie draft errors', () => {
+    for (const kind of ['free-agency-incomplete', 'pool-not-generated', 'picks-exist', 'kind-not-needed', 'draft-complete', 'not-in-pool', 'no-picks', 'no-names'] as const) {
+      expect(planErrorText({ kind }, make('S')).length).toBeGreaterThan(0);
+    }
   });
 });
 

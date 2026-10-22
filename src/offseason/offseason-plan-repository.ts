@@ -234,14 +234,21 @@ const DUPLICATE_NAME = 'A team with this name already exists in this league or a
 
 const norm = (name: string) => name.trim().toLowerCase();
 
-/** Every staged new team in every offseason plan, with the plan's league, or a read failure. Fails closed on an unreadable plan. */
-async function listStagedNewTeams(db: Database): Promise<Loaded<{ leagueId: string; team: StagedNewTeam }[]>> {
+interface StagedNames {
+  teams: { leagueId: string; team: StagedNewTeam }[];
+  /** Names of the draftees in every plan's draft pool. */
+  draftees: string[];
+}
+
+/** Every staged new team and draftee name in every offseason plan, or a read failure. Fails closed on an unreadable plan. */
+async function listStagedNewTeams(db: Database): Promise<Loaded<StagedNames>> {
   const stored = await db.list<unknown>(OFFSEASON_PLAN_COLLECTION);
   if (!stored.ok) return { ok: false, error: stored.error };
-  const out: { leagueId: string; team: StagedNewTeam }[] = [];
+  const out: StagedNames = { teams: [], draftees: [] };
   for (const { id, value } of stored.value) {
     if (!isOffseasonPlan(value) || value.seasonId !== id) return { ok: false, error: new Error(`Saved offseason plan ${id} could not be read`) };
-    for (const team of value.newTeams ?? []) out.push({ leagueId: value.leagueId, team });
+    for (const team of value.newTeams ?? []) out.teams.push({ leagueId: value.leagueId, team });
+    for (const player of value.draftPool ?? []) out.draftees.push(player.name);
   }
   return { ok: true, value: out };
 }
@@ -252,7 +259,7 @@ interface NewTeamContext {
   plan: OffseasonPlan;
   links: { hasAbove: boolean; hasBelow: boolean };
   chain: string[];
-  staged: { leagueId: string; team: StagedNewTeam }[];
+  staged: StagedNames;
 }
 
 /** The pieces every new-team edit needs: the offseason season, this league's plan, and what its links leave open. */
@@ -278,12 +285,13 @@ async function loadForNewTeams(db: Database, league: League): Promise<PlanFailur
   return { ok: true, season, plan: own.value, links, chain: chainLeagueIds(current, leagues), staged: staged.value };
 }
 
-/** Names a new roster may not use: burned, or already on another staged new team. */
-async function unavailablePlayerNames(db: Database, staged: { team: StagedNewTeam }[], except?: string) {
+/** Names a new roster may not use: burned, on another staged new team, or on a staged draftee. */
+async function unavailablePlayerNames(db: Database, staged: StagedNames, except?: string) {
   const burned = await getBurnedNames(db);
   if (!burned.ok) return burned;
   const names = new Set(burned.value);
-  for (const { team } of staged) if (team.id !== except) for (const p of team.players) names.add(p.name);
+  for (const { team } of staged.teams) if (team.id !== except) for (const p of team.players) names.add(p.name);
+  for (const name of staged.draftees) names.add(name);
   return ok(names);
 }
 
@@ -323,7 +331,7 @@ async function addNow(db: Database, league: League, input: NewTeamInput, vacancy
     const identity = identityForSeason(value, loaded.season.index) ?? value.identities[0];
     return norm(identity.name) === wanted;
   });
-  const usedByStaged = loaded.staged.some(({ leagueId, team }) => loaded.chain.includes(leagueId) && norm(team.name) === wanted);
+  const usedByStaged = loaded.staged.teams.some(({ leagueId, team }) => loaded.chain.includes(leagueId) && norm(team.name) === wanted);
   if (usedByTeam || usedByStaged) return fail({ kind: 'validation', fields: { name: DUPLICATE_NAME } });
 
   const unavailable = await unavailablePlayerNames(db, loaded.staged);

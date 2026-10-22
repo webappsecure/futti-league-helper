@@ -5,6 +5,7 @@ import { acceptLeague } from '@/seasons/accept-league';
 import { finishSeason } from '@/seasons/season-archive-repository';
 import { createMemoryDatabase } from '@/storage/memory-database';
 import type { Database } from '@/storage/types';
+import { generateDraftStandard } from '@/rosters/roster';
 import { createFranchise, listFranchises } from '@/teams/franchise-repository';
 import { OFFSEASON_PLAN_COLLECTION } from './offseason-plan';
 import { addNewTeam, getOffseasonPlan, planErrorText, removeNewTeam, rerollNewTeam, saveOffseasonPlan, stageArrivals } from './offseason-plan-repository';
@@ -132,6 +133,30 @@ describe('addNewTeam', () => {
     expect(names).toHaveLength(16);
     expect(new Set(names).size).toBe(16);
     expect(names.some((n) => burned.value.has(n))).toBe(false);
+  });
+
+  it('never uses the name of a staged draftee, in this league or another', async () => {
+    const { db, u, l } = await pair();
+    const draftee = (id: string, name: string) => generateDraftStandard(constRng(3), () => name, () => id);
+    const withPool = async (seasonId: string, names: string[]) => {
+      const plan = await planOf(db, seasonId);
+      await db.batch([{ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: seasonId, value: { ...plan, draftPool: names.map((n, i) => draftee(`d-${seasonId}-${i}`, n)) } }]);
+    };
+    const own = ['AAAA', 'BBBB', 'CCCC', 'DDDD', 'EEEE', 'FFFF', 'GGGG', 'HHHH'];
+    await withPool('s-L', own.slice(0, 4));
+    await withPool('s-U', own.slice(4));
+    // Only draftee names in the name pool: nothing is left for a new team.
+    expect(await addNewTeam(db, l, identity('Wolves'), 'demoted', { newId, pool: own })).toMatchObject({ ok: false, error: { kind: 'no-names' } });
+    // With free names added, only those are used.
+    const free = ['IIII', 'JJJJ', 'KKKK', 'LLLL', 'MMMM', 'NNNN', 'OOOO', 'PPPP'];
+    expect((await addNewTeam(db, l, identity('Wolves'), 'demoted', { newId, pool: [...own, ...free] })).ok).toBe(true);
+    const team = (await planOf(db, 's-L')).newTeams![0];
+    expect(team.players.every((p) => free.includes(p.name))).toBe(true);
+    // A reroll keeps avoiding them too.
+    expect((await rerollNewTeam(db, l, team.id, { pool: [...own, ...free] })).ok).toBe(true);
+    expect((await planOf(db, 's-L')).newTeams![0].players.every((p) => free.includes(p.name))).toBe(true);
+    expect(await rerollNewTeam(db, l, team.id, { pool: own })).toMatchObject({ ok: false, error: { kind: 'no-names' } });
+    void u;
   });
 
   it('reports pool exhaustion as no-names and writes nothing', async () => {
