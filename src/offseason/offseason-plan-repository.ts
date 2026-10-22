@@ -20,6 +20,7 @@ import {
   departureErrorText,
   isOffseasonPlan,
   OFFSEASON_PLAN_COLLECTION,
+  stagedPlayerNames,
   validateDepartures,
   type DepartureError,
   type OffseasonPlan,
@@ -54,6 +55,7 @@ export type PlanError =
   | { kind: 'free-agency-incomplete' }
   | { kind: 'pool-not-generated' }
   | { kind: 'picks-exist' }
+  | { kind: 'rookie-draft-incomplete' }
   | { kind: 'kind-not-needed' }
   | { kind: 'blocked'; blocked: BlockedNeighbor[] }
   | { kind: 'missing-team'; franchiseId: string }
@@ -236,7 +238,7 @@ const norm = (name: string) => name.trim().toLowerCase();
 
 interface StagedNames {
   teams: { leagueId: string; team: StagedNewTeam }[];
-  /** Names of the draftees in every plan's draft pool. */
+  /** Names of staged players in every plan other than the new teams' own rosters: draftees and progression replacements. */
   draftees: string[];
 }
 
@@ -248,7 +250,7 @@ async function listStagedNewTeams(db: Database): Promise<Loaded<StagedNames>> {
   for (const { id, value } of stored.value) {
     if (!isOffseasonPlan(value) || value.seasonId !== id) return { ok: false, error: new Error(`Saved offseason plan ${id} could not be read`) };
     for (const team of value.newTeams ?? []) out.teams.push({ leagueId: value.leagueId, team });
-    for (const player of value.draftPool ?? []) out.draftees.push(player.name);
+    out.draftees.push(...stagedPlayerNames({ ...value, newTeams: undefined }));
   }
   return { ok: true, value: out };
 }
@@ -422,6 +424,8 @@ export function planErrorText(error: PlanError, league: League): string {
       return 'Generate the draft pool first.';
     case 'picks-exist':
       return 'Undo the rookie picks before regenerating the draft pool.';
+    case 'rookie-draft-incomplete':
+      return 'Finish the rookie draft first.';
     case 'kind-not-needed':
       return 'That team does not need that kind of player.';
     case 'blocked':

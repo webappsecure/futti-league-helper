@@ -1,8 +1,8 @@
 import type { League } from '@/leagues/league';
 import type { SeasonArchive } from '@/seasons/season-archive';
-import { generateDraftStandard } from '@/rosters/roster';
+import { generateDraftGoalie, generateDraftStandard } from '@/rosters/roster';
 import { rngFromDice } from '@/rules/test-rng';
-import { departureErrorText, isOffseasonPlan, suggestDepartures, validateDepartures } from './offseason-plan';
+import { departureErrorText, isOffseasonPlan, stagedPlayerNames, suggestDepartures, validateDepartures } from './offseason-plan';
 
 const league = (promotedCount: number, demotedCount: number, relegation = true): League => ({
   id: 'L1',
@@ -104,5 +104,41 @@ describe('isOffseasonPlan draft pool and picks', () => {
     expect(isOffseasonPlan({ ...base, draftPool: pool, draftPicks: [{ franchiseId: 'a', playerId: 'zz' }] })).toBe(false);
     expect(isOffseasonPlan({ ...base, draftPool: pool, draftPicks: [{ franchiseId: 'a', playerId: 'd1' }, { franchiseId: 'b', playerId: 'd1' }] })).toBe(false);
     expect(isOffseasonPlan({ ...base, draftPool: pool, draftPicks: [{ franchiseId: '', playerId: 'd1' }] })).toBe(false);
+  });
+});
+
+describe('isOffseasonPlan progression', () => {
+  const base = { seasonId: 's-1', leagueId: 'L1', promoted: [], demoted: [] };
+  const draftee = (id: string, name: string) => generateDraftStandard(rngFromDice(1, 1, 6, 6, 3, 1, 1, 1, 1), () => name, () => id);
+  const goalie = (id: string, name: string) => generateDraftGoalie(rngFromDice(6, 6, 4, 4, 1, 1), () => name, () => id);
+  const aged = { ...draftee('p1', 'AAA'), age: 31 };
+  const entry = (extra: Record<string, unknown> = {}) => ({ franchiseId: 'a', playerId: 'p1', roll: 3, ...extra });
+  const ok = (progression: unknown) => isOffseasonPlan({ ...base, progression });
+  it('accepts unchanged, changed and retired entries', () => {
+    expect(ok([])).toBe(true);
+    expect(ok([entry(), entry({ playerId: 'p2', after: aged }), entry({ playerId: 'p3', replacement: goalie('r1', 'BBB') })])).toBe(true);
+  });
+  it('rejects each invalid case', () => {
+    expect(ok('x')).toBe(false);
+    expect(ok([null])).toBe(false);
+    expect(ok([entry({ roll: 0 })])).toBe(false);
+    expect(ok([entry({ roll: 7 })])).toBe(false);
+    expect(ok([entry({ roll: 2.5 })])).toBe(false);
+    expect(ok([entry({ franchiseId: '' })])).toBe(false);
+    expect(ok([entry(), entry()])).toBe(false);
+    expect(ok([entry({ after: aged, replacement: draftee('r1', 'BBB') })])).toBe(false);
+    expect(ok([entry({ replacement: { ...draftee('r1', 'BBB'), age: 25 } })])).toBe(false);
+    expect(ok([entry({ after: { ...aged, age: 17 } })])).toBe(false);
+    expect(ok([entry({ after: { ...aged, offense: 9 } })])).toBe(false);
+  });
+});
+
+describe('stagedPlayerNames', () => {
+  it('lists new team players, draftees and replacements', () => {
+    const d = generateDraftStandard(rngFromDice(1, 1, 6, 6, 3, 1, 1, 1, 1), () => 'DRAFTEE', () => 'd');
+    const r = generateDraftStandard(rngFromDice(1, 1, 6, 6, 3, 1, 1, 1, 1), () => 'REPLACE', () => 'r');
+    const plan = { seasonId: 's', leagueId: 'L', promoted: [], demoted: [], draftPool: [d], progression: [{ franchiseId: 'a', playerId: 'x', roll: 1, replacement: r }, { franchiseId: 'a', playerId: 'y', roll: 2 }] };
+    expect(stagedPlayerNames(plan)).toEqual(['DRAFTEE', 'REPLACE']);
+    expect(stagedPlayerNames({ ...plan, draftPool: undefined, progression: undefined })).toEqual([]);
   });
 });

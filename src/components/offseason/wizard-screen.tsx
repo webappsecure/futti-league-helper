@@ -8,6 +8,7 @@ import { DeparturesStep } from '@/components/offseason/departures-step';
 import { NewTeamsSection } from '@/components/offseason/new-teams-section';
 import { OrderStep } from '@/components/offseason/order-step';
 import { RookieDraftStep } from '@/components/offseason/rookie-draft-step';
+import { ProgressionStep } from '@/components/offseason/progression-step';
 import { ProtectionStep } from '@/components/offseason/protection-step';
 import { WizardMessage, WizardShell } from '@/components/offseason/wizard-shell';
 import { ThemedText } from '@/components/themed-text';
@@ -154,6 +155,9 @@ function WizardStepScreen({ league, season, step }: { league: League; season: Se
       )}
       {step === 'rookie-draft' && data.plan !== null && status !== null && (
         <RookieDraftStep league={league} archive={data.archive} plan={data.plan} teams={data.teams} arrivals={status} nameOf={nameOf} refresh={refresh} />
+      )}
+      {step === 'progression' && data.plan !== null && status !== null && (
+        <ProgressionStep league={league} archive={data.archive} plan={data.plan} teams={data.teams} arrivals={status} nameOf={nameOf} refresh={refresh} />
       )}
     </WizardShell>
   );

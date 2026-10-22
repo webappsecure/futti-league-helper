@@ -1,5 +1,5 @@
 import type { League } from '@/leagues/league';
-import { isDraftee, isRoster, type RosterPlayer } from '@/rosters/roster';
+import { isDraftee, isPlayerAged, isRoster, type RosterPlayer } from '@/rosters/roster';
 import type { Grade } from '@/rules/charts';
 import type { SeasonArchive } from '@/seasons/season-archive';
 import { validateIdentityInput } from '@/teams/franchise';
@@ -56,6 +56,20 @@ export interface StagedDraftPick {
   playerId: string;
 }
 
+/**
+ * What happens to one progressing player. `after` holds the changed ratings (the stored age is unchanged);
+ * `replacement` is set instead when the player retires, and is a new draftee for the same team.
+ */
+export interface StagedProgression {
+  /** The team the player is on after the drafts. */
+  franchiseId: string;
+  playerId: string;
+  /** The d6 that decided the change. */
+  roll: number;
+  after?: RosterPlayer;
+  replacement?: RosterPlayer;
+}
+
 /** The teams leaving the league this offseason, by franchise id, and the teams staged to arrive or to be created. One document per season; its id is the season id. */
 export interface OffseasonPlan {
   seasonId: string;
@@ -71,6 +85,17 @@ export interface OffseasonPlan {
   draftPool?: RosterPlayer[];
   /** Rookie draft picks in the order they were made; a team may appear several times. */
   draftPicks?: StagedDraftPick[];
+  /** Progression results, one per progressing player in roll order. */
+  progression?: StagedProgression[];
+}
+
+/** The names of every player staged in a plan: new teams, the draft pool and progression replacements. */
+export function stagedPlayerNames(plan: OffseasonPlan): string[] {
+  return [
+    ...(plan.newTeams ?? []).flatMap((t) => t.players.map((p) => p.name)),
+    ...(plan.draftPool ?? []).map((p) => p.name),
+    ...(plan.progression ?? []).flatMap((r) => (r.replacement === undefined ? [] : [r.replacement.name])),
+  ];
 }
 
 export type DepartureError =
@@ -227,6 +252,23 @@ export function isOffseasonPlan(value: unknown): value is OffseasonPlan {
     });
     if (!valid) return false;
     if (new Set((picks as StagedDraftPick[]).map((p) => p.playerId)).size !== picks.length) return false;
+  }
+  if (v.progression !== undefined) {
+    if (!Array.isArray(v.progression)) return false;
+    const list = v.progression as unknown[];
+    const valid = list.every((r) => {
+      if (typeof r !== 'object' || r === null) return false;
+      const q = r as Record<string, unknown>;
+      if (typeof q.franchiseId !== 'string' || q.franchiseId.length === 0) return false;
+      if (typeof q.playerId !== 'string' || q.playerId.length === 0) return false;
+      if (typeof q.roll !== 'number' || !Number.isInteger(q.roll) || q.roll < 1 || q.roll > 6) return false;
+      if (q.after !== undefined && q.replacement !== undefined) return false;
+      if (q.after !== undefined && !isPlayerAged(q.after, 18)) return false;
+      if (q.replacement !== undefined && !isDraftee(q.replacement)) return false;
+      return true;
+    });
+    if (!valid) return false;
+    if (new Set((list as StagedProgression[]).map((r) => r.playerId)).size !== list.length) return false;
   }
   return true;
 }

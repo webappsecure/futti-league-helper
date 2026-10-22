@@ -207,6 +207,12 @@ export function isDraftee(value: unknown): value is RosterPlayer {
   return (kind === 'standard' || kind === 'goalie') && isPlayer(value, kind, 18, 22);
 }
 
+/** A player of either kind with an age of `minAge` or more (no upper bound) and otherwise valid ratings. */
+export function isPlayerAged(value: unknown, minAge: number): value is RosterPlayer {
+  const kind = (value as { kind?: unknown } | null)?.kind;
+  return (kind === 'standard' || kind === 'goalie') && isPlayer(value, kind, minAge, Infinity);
+}
+
 export function isRoster(value: unknown): value is Roster {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;

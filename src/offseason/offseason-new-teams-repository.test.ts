@@ -159,6 +159,15 @@ describe('addNewTeam', () => {
     void u;
   });
 
+  it('never uses the name of a staged progression replacement', async () => {
+    const { db, l } = await solo();
+    const names = ['AAAA', 'BBBB', 'CCCC', 'DDDD', 'EEEE', 'FFFF', 'GGGG', 'HHHH'];
+    const plan = await planOf(db, 's-S');
+    const progression = names.map((n, i) => ({ franchiseId: 'x', playerId: `p${i}`, roll: 1, replacement: generateDraftStandard(constRng(3), () => n, () => `r${i}`) }));
+    await db.batch([{ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: 's-S', value: { ...plan, progression } }]);
+    expect(await addNewTeam(db, l, identity('Wolves'), 'demoted', { newId, pool: names })).toMatchObject({ ok: false, error: { kind: 'no-names' } });
+  });
+
   it('reports pool exhaustion as no-names and writes nothing', async () => {
     const { db, l } = await solo();
     const r = await addNewTeam(db, l, identity('Falcons'), 'promoted', { newId, pool: ['AAAA'] });

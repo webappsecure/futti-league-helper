@@ -42,10 +42,16 @@ async function write(db: Database, plan: OffseasonPlan, teamChanges: StagedTeamC
   return putClearingDraft(db, next);
 }
 
-/** Saves a plan after dropping the draft pool and rookie picks, which depend on every earlier roster change. */
+/** Saves a plan after dropping the draft pool, rookie picks and progression, which depend on every earlier roster change. */
 export async function putClearingDraft(db: Database, next: OffseasonPlan): Promise<PlanResult> {
   delete next.draftPool;
   delete next.draftPicks;
+  return putClearingProgression(db, next);
+}
+
+/** Saves a plan after dropping the progression results, which depend on the rookie draft. */
+export async function putClearingProgression(db: Database, next: OffseasonPlan): Promise<PlanResult> {
+  delete next.progression;
   return putRaw(db, next);
 }
 
