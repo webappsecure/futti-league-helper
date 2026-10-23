@@ -10,7 +10,7 @@ export const STEP_INFO: Record<WizardStep, { title: string; instruction: string 
   order: { title: 'Finishing order', instruction: 'Check the final finishing order of the season. Correct it here if it is wrong.' },
   departures: { title: 'Departures', instruction: 'Choose which teams are promoted and demoted out of this league, then save the plan.' },
   arrivals: { title: 'Arrivals', instruction: 'Bring in the teams moving here from the linked leagues. Their ratings are adjusted when staged.' },
-  'new-teams': { title: 'New teams', instruction: 'Fill any places the linked leagues do not fill with newly created teams.' },
+  'new-teams': { title: 'New and former teams', instruction: 'Fill any places the linked leagues do not fill with newly created teams or with former teams of this league.' },
   protection: { title: 'Protection', instruction: 'Protect one player on each team. A protected player cannot retire or be released.' },
   aging: { title: 'Aging, retirement and release', instruction: 'Age every player a year, retire the oldest unprotected player on each team and release one more at random.' },
   'free-agency': { title: 'Free agency draft', instruction: 'Each team picks one released player, in draft order. The team on the clock is shown.' },

@@ -10,11 +10,11 @@ export const AGING_YEARS = 1;
 /** A team that takes part in protection, aging and release. */
 export interface ParticipatingTeam {
   franchiseId: string;
-  origin: 'staying' | 'arrival';
+  origin: 'staying' | 'arrival' | 'former';
   players: RosterPlayer[];
 }
 
-/** Teams staying in the league (finishing order, departures removed) then staged arrivals. New teams never take part. */
+/** Teams staying in the league (finishing order, departures removed), then staged arrivals, then staged former teams. New teams never take part. */
 export function participatingTeams(archive: SeasonArchive, plan: OffseasonPlan): ParticipatingTeam[] {
   const leaving = new Set([...plan.promoted, ...plan.demoted]);
   const staying = [...archive.teams]
@@ -22,7 +22,8 @@ export function participatingTeams(archive: SeasonArchive, plan: OffseasonPlan):
     .filter((t) => !leaving.has(t.franchiseId))
     .map((t): ParticipatingTeam => ({ franchiseId: t.franchiseId, origin: 'staying', players: t.players }));
   const arrivals = (plan.arrivals ?? []).map((a): ParticipatingTeam => ({ franchiseId: a.franchiseId, origin: 'arrival', players: a.players }));
-  return [...staying, ...arrivals];
+  const former = (plan.formerTeams ?? []).map((f): ParticipatingTeam => ({ franchiseId: f.franchiseId, origin: 'former', players: f.players }));
+  return [...staying, ...arrivals, ...former];
 }
 
 function pickRandom<T>(items: readonly T[], rng: Rng): T {

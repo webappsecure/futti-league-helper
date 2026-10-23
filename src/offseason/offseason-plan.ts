@@ -2,7 +2,7 @@ import type { League } from '@/leagues/league';
 import { isDraftee, isPlayerAged, isRoster, type RosterPlayer } from '@/rosters/roster';
 import type { Grade } from '@/rules/charts';
 import type { SeasonArchive } from '@/seasons/season-archive';
-import { validateIdentityInput } from '@/teams/franchise';
+import { validateIdentityInput, type FranchiseIdentity } from '@/teams/franchise';
 import { replacementGrade } from './rating-adjust';
 
 export const OFFSEASON_PLAN_COLLECTION = 'offseason-plans';
@@ -31,6 +31,19 @@ export interface StagedNewTeam {
   name: string;
   primaryColor: string;
   secondaryColor: string;
+  players: RosterPlayer[];
+}
+
+/**
+ * A former member of this league, unassigned since an earlier offseason, staged to fill a place the linked leagues do not fill.
+ * `players` is its saved roster as adjusted for the vacancy. It takes part in the offseason like an arrival.
+ */
+export interface StagedFormerTeam {
+  franchiseId: string;
+  /** The movement of the departing team whose place it fills. It decides the rating adjustment (replacing a promoted team raises ratings, replacing a demoted team lowers them); the team itself moves the other way, which decides its draft position. */
+  vacancy: 'promoted' | 'demoted';
+  /** The identity the team had when it left, for showing its name. */
+  identity: FranchiseIdentity;
   players: RosterPlayer[];
 }
 
@@ -78,6 +91,7 @@ export interface OffseasonPlan {
   demoted: string[];
   arrivals?: StagedArrival[];
   newTeams?: StagedNewTeam[];
+  formerTeams?: StagedFormerTeam[];
   teamChanges?: StagedTeamChange[];
   /** Free agency picks in the order they were made. */
   freeAgentPicks?: StagedFreeAgentPick[];
@@ -185,6 +199,18 @@ function isStagedNewTeam(value: unknown, leagueId: string): value is StagedNewTe
   return isRoster({ franchiseId: v.id, leagueId, players: v.players });
 }
 
+function isStagedFormerTeam(value: unknown): value is StagedFormerTeam {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.franchiseId !== 'string' || v.franchiseId.length === 0) return false;
+  if (v.vacancy !== 'promoted' && v.vacancy !== 'demoted') return false;
+  const identity = v.identity as Record<string, unknown> | null;
+  if (typeof identity !== 'object' || identity === null) return false;
+  if (typeof identity.fromSeason !== 'number' || !Number.isInteger(identity.fromSeason) || identity.fromSeason < 1) return false;
+  if (typeof identity.city !== 'string' || typeof identity.name !== 'string' || typeof identity.primaryColor !== 'string' || typeof identity.secondaryColor !== 'string') return false;
+  return isRoster({ franchiseId: v.franchiseId, players: v.players });
+}
+
 function isStagedTeamChange(value: unknown): value is StagedTeamChange {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -214,6 +240,12 @@ export function isOffseasonPlan(value: unknown): value is OffseasonPlan {
     if (!Array.isArray(v.newTeams) || !v.newTeams.every((t) => isStagedNewTeam(t, leagueId))) return false;
     const ids = v.newTeams.map((t: StagedNewTeam) => t.id);
     if (new Set([...ids, ...arrivalIds]).size !== ids.length + arrivalIds.length) return false;
+  }
+  if (v.formerTeams !== undefined) {
+    if (!Array.isArray(v.formerTeams) || !v.formerTeams.every(isStagedFormerTeam)) return false;
+    const taken = [...arrivalIds, ...(Array.isArray(v.newTeams) ? v.newTeams.map((t: StagedNewTeam) => t.id) : [])];
+    const ids = v.formerTeams.map((t: StagedFormerTeam) => t.franchiseId);
+    if (new Set([...ids, ...taken]).size !== ids.length + taken.length) return false;
   }
   if (v.teamChanges !== undefined) {
     if (!Array.isArray(v.teamChanges) || !v.teamChanges.every(isStagedTeamChange)) return false;

@@ -36,7 +36,7 @@ Fütti League and Game Tracker. Features in rough build order; details come in
 - [x] 13b. **Offseason: progression** - Roll progression for eligible players, retire those who fall out, and fill the gaps with new random draftees, staged in the plan
 - [x] 13c. **Offseason: approval and next season** - Approve the offseason: apply every staged change, create the next season, burn names, discard undrafted players, and open the offseason to leagues without relegation
 - [x] 18. **Team control star limits** - Keep each team's total control stars between 2 and 6: when a team is generated, and again after progression in the offseason
-- [ ] 11d. **Offseason: former teams** - Fill a vacancy with an unassigned team that once played in the league, with rating adjustment by direction; built after 13 defines the unassigned-team pool (teams that leave with no linked league stay as franchises with no league)
+- [x] 11d. **Offseason: former teams** - Fill a vacancy with an unassigned team that once played in the league, with rating adjustment by direction; built after 13 defines the unassigned-team pool (teams that leave with no linked league stay as franchises with no league)
 
 ## History and output
 - [ ] 14. **Franchise and player history** - Browse franchise history by season (identity changes included) and retired player records, with room for honors later

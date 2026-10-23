@@ -9,7 +9,7 @@ import { SEASON_COLLECTION } from '@/seasons/season';
 import { getSeasonArchive } from '@/seasons/season-archive-repository';
 import { getLeagueSeason } from '@/seasons/season-repository';
 import type { Database, Op } from '@/storage/types';
-import type { Franchise } from '@/teams/franchise';
+import { isFranchise, type Franchise } from '@/teams/franchise';
 import { FRANCHISE_COLLECTION, listFranchises } from '@/teams/franchise-repository';
 import { approvalErrorText, buildApproval, type Approval, type ApprovalError, type ChainLeague } from './approval';
 import { OFFSEASON_PLAN_COLLECTION } from './offseason-plan';
@@ -95,6 +95,15 @@ export async function prepareApproval(db: Database, league: League, newId: () =>
     if (!listed.ok) return storage(listed.error.kind === 'storage' ? listed.error.error : new Error('Could not read teams'));
     if (listed.value.unreadable > 0) return storage(new Error('A saved team could not be read'));
     franchises.push(...listed.value.teams);
+  }
+  // Returning former teams have no league yet, so they are not in the chain's lists.
+  for (const { plan } of ready) {
+    for (const { franchiseId } of plan.formerTeams ?? []) {
+      const stored = await db.get<unknown>(FRANCHISE_COLLECTION, franchiseId);
+      if (!stored.ok) return storage(stored.error);
+      if (stored.value !== null && !isFranchise(stored.value)) return storage(new Error(`Saved team ${franchiseId} could not be read`));
+      if (stored.value !== null) franchises.push(stored.value);
+    }
   }
   const built = buildApproval({ leagues: ready, franchises, newId });
   if (!built.ok) return fail({ kind: 'inconsistent', error: built.error });

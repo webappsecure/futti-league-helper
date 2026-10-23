@@ -57,6 +57,7 @@ export type PlanError =
   | { kind: 'picks-exist' }
   | { kind: 'rookie-draft-incomplete' }
   | { kind: 'kind-not-needed' }
+  | { kind: 'not-former' }
   | { kind: 'blocked'; blocked: BlockedNeighbor[] }
   | { kind: 'missing-team'; franchiseId: string }
   | { kind: 'no-season' }
@@ -101,6 +102,7 @@ async function saveNow(db: Database, league: League, promoted: string[], demoted
   const plan: OffseasonPlan = {
     ...(existing.value?.arrivals ? { arrivals: existing.value.arrivals } : {}),
     ...(existing.value?.newTeams ? { newTeams: existing.value.newTeams } : {}),
+    ...(existing.value?.formerTeams ? { formerTeams: existing.value.formerTeams } : {}),
     seasonId: season.id,
     leagueId: league.id,
     promoted: [...promoted],
@@ -218,8 +220,8 @@ async function stageNow(db: Database, league: League, rng: Rng): Promise<PlanRes
   if (!built.ok) return fail({ kind: 'missing-team', franchiseId: built.franchiseId });
 
   // Saved protections and free agency picks depend on who participates and on the adjusted ratings, so they are dropped.
-  const { seasonId, leagueId, promoted, demoted, newTeams } = own.value;
-  const plan: OffseasonPlan = { seasonId, leagueId, promoted, demoted, arrivals: built.value, ...(newTeams ? { newTeams } : {}) };
+  const { seasonId, leagueId, promoted, demoted, newTeams, formerTeams } = own.value;
+  const plan: OffseasonPlan = { seasonId, leagueId, promoted, demoted, arrivals: built.value, ...(newTeams ? { newTeams } : {}), ...(formerTeams ? { formerTeams } : {}) };
   const written = await db.batch([{ type: 'put', collection: OFFSEASON_PLAN_COLLECTION, id: season.id, value: plan }]);
   return written.ok ? { ok: true, value: plan } : storage(written.error);
 }
@@ -232,9 +234,9 @@ export interface NewTeamOptions {
 
 export type NewTeamInput = Pick<StagedNewTeam, 'city' | 'name' | 'primaryColor' | 'secondaryColor'>;
 
-const DUPLICATE_NAME = 'A team with this name already exists in this league or a linked league.';
+export const DUPLICATE_NAME = 'A team with this name already exists in this league or a linked league.';
 
-const norm = (name: string) => name.trim().toLowerCase();
+export const norm = (name: string) => name.trim().toLowerCase();
 
 interface StagedNames {
   teams: { leagueId: string; team: StagedNewTeam }[];
@@ -269,7 +271,7 @@ async function listStagedNewTeams(db: Database): Promise<Loaded<StagedNames>> {
   return { ok: true, value: out };
 }
 
-interface NewTeamContext {
+export interface NewTeamContext {
   ok: true;
   season: Season;
   plan: OffseasonPlan;
@@ -279,9 +281,9 @@ interface NewTeamContext {
 }
 
 /** The pieces every new-team edit needs: the offseason season, this league's plan, and what its links leave open. */
-type PlanFailure = { ok: false; error: PlanError };
+export type PlanFailure = { ok: false; error: PlanError };
 
-async function loadForNewTeams(db: Database, league: League): Promise<PlanFailure | NewTeamContext> {
+export async function loadForNewTeams(db: Database, league: League): Promise<PlanFailure | NewTeamContext> {
   const fail = (error: PlanError): PlanFailure => ({ ok: false, error });
   const storage = (error: Error): PlanFailure => fail({ kind: 'storage', error });
   const found = await getLeagueSeason(db, league.id);
@@ -442,6 +444,8 @@ export function planErrorText(error: PlanError, league: League): string {
       return 'Finish the rookie draft first.';
     case 'kind-not-needed':
       return 'That team does not need that kind of player.';
+    case 'not-former':
+      return 'That team is not an unassigned former member of this league.';
     case 'blocked':
       return error.blocked.map(blockedText).join(' ');
     case 'missing-team':

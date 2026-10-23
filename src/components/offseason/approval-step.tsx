@@ -91,7 +91,7 @@ export function ApprovalStep({ league, plan, onApproved }: ApprovalStepProps) {
         <ThemedView key={s.leagueId} style={styles.league}>
           <ThemedText type="smallBold">{leagues.find((l) => l.id === s.leagueId)?.name ?? 'League'}</ThemedText>
           <ThemedText type="small">
-            {count(s.teams, 'team', 'teams')} in the next season, {count(s.retired, 'player retires', 'players retire')}, {count(s.rookies, 'rookie joins', 'rookies join')}, {count(s.newTeams, 'new team', 'new teams')}.
+            {count(s.teams, 'team', 'teams')} in the next season, {count(s.retired, 'player retires', 'players retire')}, {count(s.rookies, 'rookie joins', 'rookies join')}, {count(s.newTeams, 'new team', 'new teams')}, {count(s.formerTeams, 'former team returns', 'former teams return')}.
           </ThemedText>
         </ThemedView>
       ))}

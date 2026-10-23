@@ -7,6 +7,13 @@ import type { RosterPlayer, StandardRosterPlayer } from '@/rosters/roster';
 /** The way a team moves between leagues: `promoted` goes up to stronger play, `demoted` down to weaker play. */
 export type Movement = 'promoted' | 'demoted';
 
+/**
+ * The direction a team moves when it fills a place left by a departing team: a promoted team left, so the team that
+ * takes its place moves down (`demoted`), and the other way round. Decides draft position for former teams, as it does
+ * for teams arriving from linked leagues; ratings follow the team being replaced instead.
+ */
+export const replacementMovement = (vacancy: Movement): Movement => (vacancy === 'promoted' ? 'demoted' : 'promoted');
+
 const MAX_SIDE = 5;
 const MAX_TOTAL = 8;
 const GOALIE_STEPS = 2;

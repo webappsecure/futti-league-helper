@@ -23,23 +23,23 @@ function capacity(plan: Pick<OffseasonPlan, 'promoted' | 'demoted'>, { hasAbove,
   return { promoted: hasAbove ? 0 : plan.promoted.length, demoted: hasBelow ? 0 : plan.demoted.length };
 }
 
-const countSide = (teams: readonly StagedNewTeam[], side: StagedNewTeam['vacancy']) => teams.filter((t) => t.vacancy === side).length;
+/** Teams staged for a side: new teams and former teams fill the same places. */
+const countSide = (plan: OffseasonPlan, side: StagedNewTeam['vacancy']) =>
+  [...(plan.newTeams ?? []), ...(plan.formerTeams ?? [])].filter((t) => t.vacancy === side).length;
 
-/** Places still open for new teams after the ones already staged. */
+/** Places still open for new or former teams after the ones already staged. */
 export function openVacancies(plan: OffseasonPlan, links: VacancyLinks): Vacancies {
   const total = capacity(plan, links);
-  const staged = plan.newTeams ?? [];
   return {
-    promoted: Math.max(0, total.promoted - countSide(staged, 'promoted')),
-    demoted: Math.max(0, total.demoted - countSide(staged, 'demoted')),
+    promoted: Math.max(0, total.promoted - countSide(plan, 'promoted')),
+    demoted: Math.max(0, total.demoted - countSide(plan, 'demoted')),
   };
 }
 
-/** True when the staged new teams do not take more places than the links leave open. */
+/** True when the staged new and former teams do not take more places than the links leave open. */
 export function newTeamsFit(plan: OffseasonPlan, links: VacancyLinks): boolean {
   const total = capacity(plan, links);
-  const staged = plan.newTeams ?? [];
-  return countSide(staged, 'promoted') <= total.promoted && countSide(staged, 'demoted') <= total.demoted;
+  return countSide(plan, 'promoted') <= total.promoted && countSide(plan, 'demoted') <= total.demoted;
 }
 
 /** Rolls the replacement grade for the vacancy and generates the roster from it. */

@@ -6,6 +6,7 @@ import { AgingStep } from '@/components/offseason/aging-step';
 import { ArrivalsStep } from '@/components/offseason/arrivals-step';
 import { FreeAgencyStep } from '@/components/offseason/free-agency-step';
 import { DeparturesStep } from '@/components/offseason/departures-step';
+import { FormerTeamsSection } from '@/components/offseason/former-teams-section';
 import { NewTeamsSection } from '@/components/offseason/new-teams-section';
 import { OrderStep } from '@/components/offseason/order-step';
 import { RookieDraftStep } from '@/components/offseason/rookie-draft-step';
@@ -129,6 +130,10 @@ function WizardStepScreen({ league, season, step }: { league: League; season: Se
 
   const status = arrivals.state.status === 'ready' ? arrivals.state.arrivals : null;
   const nameOf = (team: ParticipatingTeam) => {
+    if (team.origin === 'former') {
+      const former = data.plan?.formerTeams?.find((f) => f.franchiseId === team.franchiseId);
+      return former ? displayName(former.identity, league.namingStyle) : 'Unknown team';
+    }
     const teamsOf = team.origin === 'staying' ? data.archive.teams : (status?.sources ?? []).flatMap((s) => s.archive?.teams ?? []);
     const found = teamsOf.find((t) => t.franchiseId === team.franchiseId);
     return found ? displayName(found.identity, league.namingStyle) : 'Unknown team';
@@ -144,6 +149,7 @@ function WizardStepScreen({ league, season, step }: { league: League; season: Se
       {step === 'order' && <OrderStep league={league} archive={data.archive} refresh={refresh} />}
       {step === 'departures' && <DeparturesStep league={league} season={season} archive={data.archive} plan={data.plan} refresh={refresh} />}
       {step === 'arrivals' && <ArrivalsStep league={league} hasPlan={data.plan !== null} arrivals={arrivals} refresh={refresh} />}
+      {step === 'new-teams' && data.plan !== null && <FormerTeamsSection league={league} plan={data.plan} arrivals={arrivals} refresh={refresh} />}
       {step === 'new-teams' && <NewTeamsSection league={league} plan={data.plan} arrivals={arrivals} refresh={refresh} />}
       {step === 'protection' && data.plan !== null && status !== null && (
         <ProtectionStep league={league} plan={data.plan} teams={data.teams} arrivals={status} nameOf={nameOf} refresh={refresh} />

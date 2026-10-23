@@ -32,12 +32,14 @@ export interface LeagueSummary {
   retired: number;
   rookies: number;
   newTeams: number;
+  /** Former members of the league that return. */
+  formerTeams: number;
 }
 
 export interface Approval {
   /** Closed seasons (status `archived`) followed by the new active seasons. */
   seasons: Season[];
-  /** Franchise documents to write: moved, new and unassigned teams. Teams that stay are unchanged. */
+  /** Franchise documents to write: moved, returning, new and unassigned teams. Teams that stay are unchanged. */
   franchises: Franchise[];
   /** Roster documents to write for every team in a new season and every unassigned team. */
   rosters: Roster[];
@@ -116,7 +118,7 @@ export function buildApproval(input: { leagues: readonly ChainLeague[]; franchis
       if (!hasShape(players)) return fail({ kind: 'roster-shape', franchiseId: team.franchiseId });
       rosters.push({ franchiseId: team.franchiseId, leagueId: league.id, players });
       names.push(...players.map((p) => p.name));
-      if (team.origin === 'arrival') {
+      if (team.origin !== 'staying') {
         const franchise = franchises.find((f) => f.id === team.franchiseId);
         if (franchise === undefined) return fail({ kind: 'missing-franchise', franchiseId: team.franchiseId });
         writtenFranchises.push({ ...franchise, leagueId: league.id });
@@ -156,6 +158,7 @@ export function buildApproval(input: { leagues: readonly ChainLeague[]; franchis
       retired: (plan.teamChanges ?? []).filter((c) => c.retiredId !== undefined).length + (plan.progression ?? []).filter((r) => r.replacement !== undefined).length,
       rookies: picked.size,
       newTeams: newTeams.length,
+      formerTeams: (plan.formerTeams ?? []).length,
     });
   }
   return { ok: true, value: { seasons: [...closed, ...opened], franchises: writtenFranchises, rosters, plans, names, newNames, summaries } };

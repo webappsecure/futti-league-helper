@@ -26,4 +26,4 @@ export function isSeason(value: unknown): value is Season {
   );
 }
 
-export const LOCKED_TEXT = 'This league has been accepted. Its teams and rosters are locked.';
+export const LOCKED_TEXT = 'This league\'s teams and rosters are locked. They change only when an offseason is approved.';

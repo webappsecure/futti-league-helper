@@ -1,13 +1,14 @@
 import type { RosterPlayer } from '@/rosters/roster';
 import type { SeasonArchive } from '@/seasons/season-archive';
 import type { OffseasonPlan, StagedFreeAgentPick, StagedTeamChange } from './offseason-plan';
+import { replacementMovement } from './rating-adjust';
 import type { ParticipatingTeam } from './roster-changes';
 
 export const MAX_STANDARD = 6;
 export const MAX_GOALIES = 2;
 
 /**
- * Pick order: demoted arrivals, then the staying teams, then promoted arrivals. Staying teams go by
+ * Pick order: demoted arrivals (then former teams replacing a promoted team), the staying teams, then promoted arrivals (then former teams replacing a demoted team). Staying teams go by
  * their finish this season and arrivals by their finish in their own league, best first.
  */
 export function draftOrder(archive: SeasonArchive, plan: OffseasonPlan, sourceArchives: readonly SeasonArchive[]): string[] {
@@ -19,11 +20,14 @@ export function draftOrder(archive: SeasonArchive, plan: OffseasonPlan, sourceAr
   const arrivals = plan.arrivals ?? [];
   const positionOf = (a: { franchiseId: string; sourceSeasonId: string }) =>
     sourceArchives.find((s) => s.seasonId === a.sourceSeasonId)?.teams.find((t) => t.franchiseId === a.franchiseId)?.position ?? Number.MAX_SAFE_INTEGER;
-  const group = (movement: 'promoted' | 'demoted') =>
-    arrivals
+  const group = (movement: 'promoted' | 'demoted') => [
+    ...arrivals
       .filter((a) => a.movement === movement)
       .sort((a, b) => positionOf(a) - positionOf(b))
-      .map((a) => a.franchiseId);
+      .map((a) => a.franchiseId),
+    // A former team fills the place of a departed team like a team from a linked league does, so it goes with the arrivals that move the same way, after them.
+    ...(plan.formerTeams ?? []).filter((f) => replacementMovement(f.vacancy) === movement).map((f) => f.franchiseId),
+  ];
   return [...group('demoted'), ...staying, ...group('promoted')];
 }
 

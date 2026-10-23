@@ -137,7 +137,7 @@ describe('buildApproval', () => {
     const r = buildApproval({ leagues: [solo(plan, teams)], franchises: fs, newId: ids });
     if (!r.ok) throw new Error('approval');
     expect(r.value.plans[0].draftPool?.map((p) => p.id)).toEqual(['r1']);
-    expect(r.value.summaries).toEqual([{ leagueId: 'L', teams: 2, retired: 1, rookies: 1, newTeams: 0 }]);
+    expect(r.value.summaries).toEqual([{ leagueId: 'L', teams: 2, retired: 1, rookies: 1, newTeams: 0, formerTeams: 0 }]);
     expect(r.value.names).not.toContain('R2');
     expect(r.value.newNames).toEqual(['R1']);
   });

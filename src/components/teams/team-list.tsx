@@ -11,7 +11,7 @@ import { Accent, Spacing } from '@/constants/theme';
 import type { League } from '@/leagues/league';
 import { generateLeagueRosters, rerollLeague } from '@/rosters/roster-repository';
 import { useRosters } from '@/rosters/use-rosters';
-import { LOCKED_TEXT } from '@/seasons/season';
+import { LOCKED_TEXT, type Season } from '@/seasons/season';
 import type { LeagueSeasonState } from '@/seasons/use-league-season';
 import { useDatabase } from '@/storage/storage-provider';
 import { displayName, type Franchise } from '@/teams/franchise';
@@ -39,6 +39,13 @@ type TeamMode =
   | { kind: 'roster'; team: Franchise }
   | { kind: 'review' }
   | { kind: 'confirm-delete'; team: Franchise };
+
+/** Which season the teams and rosters below belong to, and why they cannot be edited. */
+function seasonLabel(season: Season): string {
+  if (season.index === 1 && season.status === 'active') return 'Accepted - Season 1. Teams and rosters are locked.';
+  const state = season.status === 'active' ? 'is in progress' : 'has ended';
+  return `Season ${season.index} ${state}. These are the teams and rosters for season ${season.index}; they change only when an offseason is approved.`;
+}
 
 export function TeamsSection({ league, state, refresh, onRetry, season, refreshSeason, onRetrySeason, onFocusChange }: TeamsSectionProps) {
   const db = useDatabase();
@@ -149,8 +156,8 @@ export function TeamsSection({ league, state, refresh, onRetry, season, refreshS
           {teams.length} of {league.size} teams
         </ThemedText>
       )}
-      {accepted && (
-        <ThemedText themeColor="textSecondary">Accepted - Season 1. Teams and rosters are locked.</ThemedText>
+      {accepted && season.status === 'ready' && season.season !== null && (
+        <ThemedText themeColor="textSecondary">{seasonLabel(season.season)}</ThemedText>
       )}
       {season.status === 'error' && (
         <ThemedView type="backgroundElement" style={styles.card}>
