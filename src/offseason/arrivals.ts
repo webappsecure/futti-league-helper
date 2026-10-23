@@ -1,3 +1,4 @@
+import { limitTeamStars } from '@/rosters/control-stars';
 import type { League } from '@/leagues/league';
 import type { Rng } from '@/rules/dice';
 import type { SeasonArchive } from '@/seasons/season-archive';
@@ -26,14 +27,14 @@ export function expectedArrivals(sources: readonly ArrivalSource[]): ExpectedArr
 
 export type BuildArrivalsResult = { ok: true; value: StagedArrival[] } | { ok: false; franchiseId: string };
 
-/** Copies each expected team's season-end roster and adjusts it for its move; the archives are left unchanged. */
+/** Copies each expected team's season-end roster, adjusts it for its move and corrects its control stars; the archives are left unchanged. */
 export function buildArrivals(expected: readonly ExpectedArrival[], sources: readonly ArrivalSource[], rng: Rng): BuildArrivalsResult {
   const value: StagedArrival[] = [];
   for (const arrival of expected) {
     const archive = sources.find((s) => s.league.id === arrival.fromLeagueId)?.archive;
     const team = archive?.teams.find((t) => t.franchiseId === arrival.franchiseId);
     if (team === undefined) return { ok: false, franchiseId: arrival.franchiseId };
-    value.push({ ...arrival, players: adjustRoster(team.players, arrival.movement, rng) });
+    value.push({ ...arrival, players: limitTeamStars(adjustRoster(team.players, arrival.movement, rng)) });
   }
   return { ok: true, value };
 }

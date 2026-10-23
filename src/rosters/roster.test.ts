@@ -1,3 +1,4 @@
+import { teamStars } from './control-stars';
 import { rngFromDice } from '@/rules/test-rng';
 import {
   generateDraftGoalie,
@@ -75,6 +76,31 @@ describe('generateRoster', () => {
         const r = generateRoster('F', 'L', grade, Math.random, names('X', 'Y', 'Z'), () => `i${Math.random()}`);
         expect(isRoster(r)).toBe(true);
       }
+    }
+  });
+});
+
+describe('control star limits', () => {
+  const stars = (r: Roster) => teamStars(r.players);
+  it('keeps every generated team between 2 and 6 stars, whatever the dice', () => {
+    for (const rng of [() => 0, () => 0.999]) {
+      const r = generateRoster('F', 'L', 'B', rng, names('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'), nextId);
+      expect(stars(r)).toBeGreaterThanOrEqual(2);
+      expect(stars(r)).toBeLessThanOrEqual(6);
+    }
+    for (let i = 0; i < 300; i += 1) {
+      const r = generateRoster('F', 'L', 'ABCDF'[i % 5] as 'A', Math.random, names('X', 'Y', 'Z'), () => `i${Math.random()}`);
+      expect(stars(r)).toBeGreaterThanOrEqual(2);
+      expect(stars(r)).toBeLessThanOrEqual(6);
+    }
+  });
+  it('corrects the team again after a player reroll', () => {
+    for (let i = 0; i < 300; i += 1) {
+      const roster = generateRoster('F', 'L', 'B', Math.random, names('X', 'Y', 'Z'), () => `i${Math.random()}`);
+      const next = rerollPlayer(roster, roster.players[i % 6].id, 'B', Math.random, () => 'NEW', () => `n${Math.random()}`)!;
+      expect(stars(next)).toBeGreaterThanOrEqual(2);
+      expect(stars(next)).toBeLessThanOrEqual(6);
+      expect(isRoster(next)).toBe(true);
     }
   });
 });

@@ -4,6 +4,7 @@ import { isValidGoaltending } from '@/rules/goaltending';
 import type { Grade, Stars } from '@/rules/charts';
 import type { Rng } from '@/rules/dice';
 import { generateDraftGoaltender, generateDraftStandardPlayer, generateGoaltender, generateStandardPlayer } from '@/rules/player-generation';
+import { limitTeamStars } from './control-stars';
 
 export const ROSTER_COLLECTION = 'rosters';
 export const STANDARD_PLAYERS = 6;
@@ -120,10 +121,10 @@ export function generateRoster(
   const players: RosterPlayer[] = [];
   for (let i = 0; i < STANDARD_PLAYERS; i += 1) players.push(generateStandard(grade, rng, pickName, newId));
   for (let i = 0; i < GOALTENDERS; i += 1) players.push(generateGoalie(grade, rng, pickName, newId));
-  return { franchiseId, leagueId, players };
+  return { franchiseId, leagueId, players: limitTeamStars(players) };
 }
 
-/** Replaces one player in place with a fresh one of the same kind; null when the id is not on the roster. */
+/** Replaces one player in place with a fresh one of the same kind, then corrects the team's control stars; null when the id is not on the roster. */
 export function rerollPlayer(
   roster: Roster,
   playerId: string,
@@ -141,7 +142,7 @@ export function rerollPlayer(
       : generateGoalie(grade, rng, pickName, newId);
   const players = roster.players.slice();
   players[index] = fresh;
-  return { ...roster, players };
+  return { ...roster, players: limitTeamStars(players) };
 }
 
 /** Longest typed last name; the longest provided name is 16. */

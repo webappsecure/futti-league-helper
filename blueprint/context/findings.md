@@ -7,10 +7,10 @@
 > finding is `open` or `fixed`, then archives resolved findings with the work
 > and resets this file.
 
-### F-02 [P3] fixed - Plans from earlier seasons would feed the name checks
+### F-03 [P3] unverified - Applied plans accumulate and are parsed on every name check
 
-**File:** src/offseason/offseason-plan-repository.ts:197
-**Found:** 2026-10-20 by /audit (scope: current; lens: all)
-**Why it matters:** `listStagedNewTeams` reads every document in `offseason-plans`, so once feature 13 applies an offseason and a league has later seasons, old plans (and their staged team and player names) would still count as "used by a staged team". Not reachable today because a league has one season until 13.
-**Suggested fix:** When feature 13 applies or archives an offseason, delete its plan, or have the name checks read only plans whose season is still in `offseason`. Confirm this in 13's spec.
-**Resolution:** `listOffseasonPlans` in offseason-plan-repository.ts returns only plans of seasons in `offseason`; `listStagedNewTeams` and `unavailableNames` use it (13c step 4).
+**File:** src/offseason/offseason-plan-repository.ts:246
+**Found:** 2026-10-22 by /audit (scope: full; lens: performance)
+**Why it matters:** 13c keeps each applied plan as history, and `listOffseasonPlans` lists and validates every plan document (plus all seasons) each time a draft pool, pick or new team is staged. Cost grows with seasons played. Not measured; at a handful of seasons it is negligible.
+**Suggested fix:** If it ever shows, read only the plans for known offseason season ids with `db.get`, instead of listing all.
+**Resolution:**

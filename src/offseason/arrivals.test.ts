@@ -50,6 +50,21 @@ describe('expectedArrivals', () => {
   });
 });
 
+describe('buildArrivals control stars', () => {
+  it('leaves every arriving team with 2 to 6 stars', () => {
+    for (const rolls of [Array(24).fill(1), Array(24).fill(6)]) {
+      const sources = [above, below];
+      const built = buildArrivals(expectedArrivals(sources), sources, rngFromDice(...rolls));
+      if (!built.ok) throw new Error('arrivals');
+      for (const a of built.value) {
+        const total = a.players.reduce((sum, p) => sum + (p.kind === 'standard' ? p.controlStars : 0), 0);
+        expect(total).toBeGreaterThanOrEqual(2);
+        expect(total).toBeLessThanOrEqual(6);
+      }
+    }
+  });
+});
+
 describe('buildArrivals', () => {
   it('raises demoted rosters and lowers promoted ones on copies', () => {
     const sources = [above, below];

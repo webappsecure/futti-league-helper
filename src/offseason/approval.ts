@@ -1,3 +1,4 @@
+import { limitTeamStars, teamStars } from '@/rosters/control-stars';
 import type { League } from '@/leagues/league';
 import { GOALTENDERS, STANDARD_PLAYERS, type Roster, type RosterPlayer } from '@/rosters/roster';
 import type { Season } from '@/seasons/season';
@@ -52,11 +53,11 @@ export interface Approval {
 export type ApprovalResult = { ok: true; value: Approval } | { ok: false; error: ApprovalError };
 
 /**
- * The roster a participating team takes into the next season: kept players and free agency picks aged a year with
- * their progression applied, replacements and rookies as drafted, position players first and goaltenders last.
- * Null when a player has no progression result.
+ * The roster a participating team takes into the next season before its control stars are corrected: kept players and free
+ * agency picks aged a year with their progression applied, replacements and rookies as drafted, position players first
+ * and goaltenders last. Null when a player has no progression result.
  */
-export function finalRoster(team: ParticipatingTeam, teams: readonly ParticipatingTeam[], plan: OffseasonPlan): RosterPlayer[] | null {
+function rosterBeforeStars(team: ParticipatingTeam, teams: readonly ParticipatingTeam[], plan: OffseasonPlan): RosterPlayer[] | null {
   const results = new Map((plan.progression ?? []).filter((r) => r.franchiseId === team.franchiseId).map((r) => [r.playerId, r]));
   const kept: RosterPlayer[] = [];
   for (const player of progressionPlayers(team, teams, plan)) {
@@ -66,6 +67,21 @@ export function finalRoster(team: ParticipatingTeam, teams: readonly Participati
   }
   const all = [...kept, ...rookiesPickedBy(team.franchiseId, plan)];
   return [...all.filter((p) => p.kind === 'standard'), ...all.filter((p) => p.kind === 'goalie')];
+}
+
+/** The roster a participating team takes into the next season, with its control stars kept between 2 and 6. Null when a player has no progression result. */
+export function finalRoster(team: ParticipatingTeam, teams: readonly ParticipatingTeam[], plan: OffseasonPlan): RosterPlayer[] | null {
+  const players = rosterBeforeStars(team, teams, plan);
+  return players === null ? null : limitTeamStars(players);
+}
+
+/** The team's control stars before and after the correction at approval, or null when nothing changes (or progression is missing). */
+export function starAdjustment(team: ParticipatingTeam, teams: readonly ParticipatingTeam[], plan: OffseasonPlan): { before: number; after: number } | null {
+  const players = rosterBeforeStars(team, teams, plan);
+  if (players === null) return null;
+  const before = teamStars(players);
+  const after = teamStars(limitTeamStars(players));
+  return before === after ? null : { before, after };
 }
 
 const hasShape = (players: readonly RosterPlayer[]) =>

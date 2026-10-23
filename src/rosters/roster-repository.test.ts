@@ -118,7 +118,9 @@ describe('rerolls', () => {
     const result = await rerollPlayer(db, league, a.id, ra.players[2].id);
     if (!result.ok) throw new Error('reroll');
     expect(result.value.players[2].id).not.toBe(ra.players[2].id);
-    expect(result.value.players.filter((_, i) => i !== 2)).toEqual(ra.players.filter((_, i) => i !== 2));
+    // The team's control stars are corrected after a reroll, so other players may gain or lose a star.
+    const noStars = (players: typeof ra.players) => players.filter((_, i) => i !== 2).map((p) => (p.kind === 'standard' ? { ...p, controlStars: 0 } : p));
+    expect(noStars(result.value.players)).toEqual(noStars(ra.players));
     const after = await listRosters(db, league);
     if (!after.ok) throw new Error('list');
     expect(after.value.rosters.find((r) => r.franchiseId === b.id)).toEqual(

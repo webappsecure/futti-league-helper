@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 
+import { starAdjustment } from '@/offseason/approval';
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -97,6 +98,7 @@ export function ProgressionStep({ league, archive, plan, teams, arrivals, nameOf
               return line === null ? [] : [{ key: r.playerId, line }];
             });
             const unchanged = mine.length - lines.length;
+            const stars = starAdjustment(team, teams, plan);
             return (
               <ThemedView key={id} style={styles.team}>
                 <ThemedText type="smallBold">{nameOf(team)}</ThemedText>
@@ -108,6 +110,11 @@ export function ProgressionStep({ league, archive, plan, teams, arrivals, nameOf
                 <ThemedText type="small" themeColor="textSecondary">
                   {unchanged} {unchanged === 1 ? 'player' : 'players'} unchanged
                 </ThemedText>
+                {stars !== null && (
+                  <ThemedText type="small">
+                    Control stars adjusted from {stars.before} to {stars.after} when the offseason is approved.
+                  </ThemedText>
+                )}
               </ThemedView>
             );
           })}

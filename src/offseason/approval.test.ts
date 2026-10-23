@@ -3,7 +3,7 @@ import type { GoalieRosterPlayer, RosterPlayer, StandardRosterPlayer } from '@/r
 import type { Season } from '@/seasons/season';
 import type { ArchivedTeam, SeasonArchive } from '@/seasons/season-archive';
 import type { Franchise } from '@/teams/franchise';
-import { approvalErrorText, buildApproval, finalRoster, type ChainLeague } from './approval';
+import { approvalErrorText, buildApproval, finalRoster, starAdjustment, type ChainLeague } from './approval';
 import type { OffseasonPlan, StagedNewTeam } from './offseason-plan';
 import type { ParticipatingTeam } from './roster-changes';
 
@@ -70,6 +70,38 @@ describe('finalRoster', () => {
     const before = JSON.stringify(plan);
     finalRoster(a, teams, plan);
     expect(JSON.stringify(plan)).toBe(before);
+  });
+});
+
+describe('control star correction at approval', () => {
+  const withStars = (id: string, stars: (0 | 1 | 2)[]): ParticipatingTeam => {
+    const players = eight(id).map((p, i) => (p.kind === 'standard' ? { ...p, controlStars: stars[i] ?? 0 } : p));
+    return { franchiseId: id, origin: 'staying', players };
+  };
+  const planFor = (teams: ParticipatingTeam[]): OffseasonPlan => ({ seasonId: 's', leagueId: 'L', promoted: [], demoted: [], progression: noChange(teams) });
+  const total = (players: RosterPlayer[] | null) => players!.reduce((sum, p) => sum + (p.kind === 'standard' ? p.controlStars : 0), 0);
+
+  it('raises a team below 2 and lowers a team above 6', () => {
+    const low = withStars('a', [0, 0, 0, 0, 0, 0]);
+    const high = withStars('b', [2, 2, 2, 2, 2, 2]);
+    const teams = [low, high];
+    expect(total(finalRoster(low, teams, planFor(teams)))).toBe(2);
+    expect(total(finalRoster(high, teams, planFor(teams)))).toBe(6);
+  });
+  it('corrects the stars that progression leaves behind', () => {
+    const team = withStars('a', [1, 1, 0, 0, 0, 0]);
+    const plan = planFor([team]);
+    plan.progression = plan.progression!.map((e) => (e.playerId === 'a-s1' ? { ...e, after: { ...(team.players[0] as StandardRosterPlayer), controlStars: 0 as const } } : e));
+    // Player 1 loses their star in progression, leaving 1 star on the team, so the best player gets another.
+    expect(total(finalRoster(team, [team], plan))).toBe(2);
+  });
+  it('reports the change, or nothing for a team in range', () => {
+    const low = withStars('a', [0, 0, 0, 0, 0, 0]);
+    const ok = withStars('b', [1, 1, 0, 0, 0, 0]);
+    const teams = [low, ok];
+    expect(starAdjustment(low, teams, planFor(teams))).toEqual({ before: 0, after: 2 });
+    expect(starAdjustment(ok, teams, planFor(teams))).toBeNull();
+    expect(starAdjustment(low, teams, { ...planFor(teams), progression: [] })).toBeNull();
   });
 });
 
